@@ -16,3 +16,4 @@ tokio = { workspace = true }
 arrow = "55.1.0"
 arrow-pyarrow = "55.1.0"
 pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
+chrono = "0.4.41"

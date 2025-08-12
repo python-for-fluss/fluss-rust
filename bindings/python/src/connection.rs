@@ -3,7 +3,7 @@ use crate::*;
 use std::sync::Arc;
 use pyo3_async_runtimes::tokio::future_into_py;
 
-/// Connection to a Fluss cluster
+// Connection to a Fluss cluster
 #[pyclass]
 pub struct FlussConnection {
     inner: Arc<fcore::client::FlussConnection>,

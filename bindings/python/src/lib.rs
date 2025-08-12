@@ -7,6 +7,7 @@ mod table;
 mod admin;
 mod types;
 mod error;
+mod utils;
 
 pub use config::*;
 pub use connection::*;
@@ -14,6 +15,7 @@ pub use table::*;
 pub use admin::*;
 pub use types::*;
 pub use error::*;
+pub use utils::*;
 
 /// A Python module implemented in Rust.
 #[pymodule]

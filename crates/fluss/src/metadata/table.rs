@@ -584,6 +584,18 @@ impl Display for LogFormat {
     }
 }
 
+impl LogFormat {
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.to_uppercase().as_str() {
+            "ARROW" => Ok(LogFormat::ARROW),
+            "INDEXED" => Ok(LogFormat::INDEXED),
+            _ => Err(crate::error::Error::InvalidTableError(
+                format!("Unknown log format: {}", s)
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum KvFormat {
     INDEXED,
@@ -597,6 +609,18 @@ impl Display for KvFormat {
             KvFormat::INDEXED => write!(f, "INDEXED")?,
         }
         Ok(())
+    }
+}
+
+impl KvFormat {
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.to_uppercase().as_str() {
+            "INDEXED" => Ok(KvFormat::INDEXED),
+            "COMPACTED" => Ok(KvFormat::COMPACTED),
+            _ => Err(crate::error::Error::InvalidTableError(
+                format!("Unknown kv format: {}", s)
+            )),
+        }
     }
 }
 
