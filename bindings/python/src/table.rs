@@ -89,7 +89,7 @@ impl FlussTable {
 }
 
 impl FlussTable {
-    /// Create a FlussTable from core table
+    // Create a FlussTable
     pub fn new_table(
         connection: Arc<fcore::client::FlussConnection>,
         metadata: Arc<fcore::client::Metadata>,
@@ -107,7 +107,7 @@ impl FlussTable {
     }
 }
 
-/// Writer for appending data to a Fluss table
+// Writer for appending data to a Fluss table
 #[pyclass]
 pub struct AppendWriter {
     inner: fcore::client::AppendWriter,

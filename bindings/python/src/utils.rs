@@ -101,14 +101,14 @@ impl Utils {
         }
     }
 
-    /// Convert Fluss Schema to Arrow Schema (future use)
+    // Convert Fluss Schema to Arrow Schema (future use)
     pub fn fluss_schema_to_arrow_schema(_fluss_schema: &fcore::metadata::Schema) -> PyResult<SchemaRef> {
         // TODO: 实现 Fluss Schema 到 Arrow Schema 的转换
         // 这个在将来需要将 Fluss Schema 转换回 PyArrow 时会用到
         Err(FlussError::new_err("Not implemented yet".to_string()))
     }
 
-    /// Convert Arrow Schema to PyArrow Schema (future use)
+    // Convert Arrow Schema to PyArrow Schema (future use)
     pub fn arrow_schema_to_pyarrow(_arrow_schema: SchemaRef) -> PyResult<PyObject> {
         // TODO: 实现 Arrow Schema 到 PyArrow Schema 的转换
         // 这个在需要返回 PyArrow Schema 给 Python 时会用到
@@ -116,17 +116,17 @@ impl Utils {
     }
 }
 
-/// Format parsing utilities
+// Format parsing utilities
 pub struct FormatUtils;
 
 impl FormatUtils {
-    /// Parse log format string to LogFormat enum
+    // Parse log format string to LogFormat enum
     pub fn parse_log_format(format_str: &str) -> PyResult<fcore::metadata::LogFormat> {
         fcore::metadata::LogFormat::parse(format_str)
             .map_err(|e| FlussError::new_err(format!("Invalid log format '{}': {}", format_str, e)))
     }
 
-    /// Parse kv format string to KvFormat enum
+    // Parse kv format string to KvFormat enum
     pub fn parse_kv_format(format_str: &str) -> PyResult<fcore::metadata::KvFormat> {
         fcore::metadata::KvFormat::parse(format_str)
             .map_err(|e| FlussError::new_err(format!("Invalid kv format '{}': {}", format_str, e)))

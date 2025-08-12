@@ -243,6 +243,13 @@ impl TableDescriptor {
     }
 }
 
+impl TableDescriptor {
+    // Convert to core TableDescriptor
+    pub fn to_core(&self) -> &fcore::metadata::TableDescriptor {
+        &self.__tbl_desc
+    }
+}
+
 // Information about a Fluss table
 #[pyclass]
 #[derive(Clone)]
@@ -430,21 +437,7 @@ impl ScanResult {
 
     // Iterator next
     fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<PyObject> {
-        if slf.current_index < slf.records.len() {
-            let current_index = slf.current_index;
-            slf.current_index += 1;
-            let item = &slf.records[current_index];
-            
-            Python::with_gil(|py| {
-                let dict = pyo3::types::PyDict::new_bound(py);
-                dict.set_item("id", item.0).ok()?;
-                dict.set_item("name", &item.1).ok()?;
-                dict.set_item("score", item.2).ok()?;
-                Some(dict.into())
-            })
-        } else {
-            None
-        }
+        None
     }
 
     fn __repr__(&self) -> String {

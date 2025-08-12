@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
+use pyo3_async_runtimes::tokio::future_into_py;
 use crate::*;
 use std::sync::Arc;
 
-/// Administrative client for managing Fluss tables
+// Administrative client for managing Fluss tables
 #[pyclass]
 pub struct FlussAdmin {
     __admin: Arc<fcore::client::FlussAdmin>,
@@ -10,66 +11,48 @@ pub struct FlussAdmin {
 
 #[pymethods]
 impl FlussAdmin {
-    /// Create a table with the given schema
+    // Create a table with the given schema
     #[pyo3(signature = (table_path, table_descriptor, ignore_if_exists=None))]
-    pub fn create_table(
+    pub fn create_table<'py>(
         &self,
+        py: Python<'py>,
         table_path: &TablePath,
-        table_descriptor: &TableDescriptor, // PyArrow schema
+        table_descriptor: &TableDescriptor,
         ignore_if_exists: Option<bool>,
-    ) -> PyResult<()> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let ignore = ignore_if_exists.unwrap_or(false);
         
-        // TODO: Implement actual table creation with Fluss
-        println!(
-            "Creating table at path: {}",
-            table_path.table_path_str(),
-        );
+        let core_table_path = table_path.to_core().clone();
+        let core_descriptor = table_descriptor.to_core().clone();
+        let admin = self.__admin.clone();
 
-        Ok(())
+        future_into_py(py, async move {
+            admin.create_table(&core_table_path, &core_descriptor, ignore)
+                .await
+                .map_err(|e| FlussError::new_err(e.to_string()))?;
+        
+            Python::with_gil(|py| Ok(py.None()))
+        })
     }
 
     // Get table information
-    pub fn get_table(&self, table_path: &TablePath) -> PyResult<TableInfo> {
-        // TODO: Implement actual table info retrieval
-        let table_info = TableInfo::new(
-            1,
-            1,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
-                .as_millis() as u64,
-            vec!["id".to_string()],
-        );
-        Ok(table_info)
-    }
-
-    // Delete a table
-    #[pyo3(signature = (table_path, ignore_if_not_exists=None))]
-    pub fn drop_table(
+    pub fn get_table<'py>(
         &self,
+        py: Python<'py>,
         table_path: &TablePath,
-        ignore_if_not_exists: Option<bool>,
-    ) -> PyResult<()> {
-        let ignore = ignore_if_not_exists.unwrap_or(false);
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let core_table_path = table_path.to_core().clone();
+        let admin = self.__admin.clone();
         
-        // TODO: Implement actual table deletion
-        println!(
-            "Dropping table: {} (ignore_if_not_exists: {})",
-            table_path.__str__(),
-            ignore
-        );
-        
-        Ok(())
-    }
+        future_into_py(py, async move {
+            let core_table_info = admin.get_table(&core_table_path).await
+                .map_err(|e| FlussError::new_err(format!("Failed to get table: {}", e)))?;
 
-    /// List all tables in the cluster
-    pub fn list_tables(&self) -> PyResult<Vec<String>> {
-        // TODO: Implement actual table listing
-        Ok(vec![
-            "fluss.my_table".to_string(),
-            "fluss.another_table".to_string(),
-        ])
+            Python::with_gil(|py| {
+                let table_info = TableInfo::from_core(core_table_info);
+                Py::new(py, table_info)
+            })
+        })
     }
 
     fn __repr__(&self) -> String {
@@ -78,7 +61,7 @@ impl FlussAdmin {
 }
 
 impl FlussAdmin {
-    /// Internal method to create FlussAdmin from core admin
+    // Internal method to create FlussAdmin from core admin
     pub fn from_core(admin: fcore::client::FlussAdmin) -> Self {
         Self {
             __admin: Arc::new(admin),
