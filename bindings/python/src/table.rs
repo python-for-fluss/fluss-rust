@@ -1,7 +1,8 @@
 use pyo3::prelude::*;
 use crate::*;
-use std::{future, sync::Arc};
+use std::sync::Arc;
 use pyo3_async_runtimes::tokio::future_into_py;
+use crate::TOKIO_RUNTIME;
 
 // Represents a Fluss table for data operations
 #[pyclass]
@@ -50,15 +51,19 @@ impl FlussTable {
         future_into_py(py, async move {
             let fluss_table = fcore::client::FlussTable::new(
                 &conn,
-                metadata,
-                table_info,
+                metadata.clone(),
+                table_info.clone(),
             );
 
             let table_scan = fluss_table.new_scan();
 
             let rust_scanner = table_scan.create_log_scanner();
 
-            let py_scanner = LogScanner::from_core(rust_scanner);
+            let py_scanner = LogScanner::from_core(
+                rust_scanner,
+                table_info.clone(),
+                table_info.schema.clone(),
+            );
 
             Python::with_gil(|py| {
                 Py::new(py, py_scanner)
@@ -116,21 +121,21 @@ pub struct AppendWriter {
 #[pymethods]
 impl AppendWriter {
     // Write Arrow table data
-    pub fn write_arrow(&mut self, batch: PyObject) -> PyResult<()> {
+    pub fn write_arrow(&mut self, _batch: PyObject) -> PyResult<()> {
         // TODO: Implement Arrow batch conversion
         println!("Writing Arrow Table data");
         Ok(())
     }
 
     // Write Arrow batch data
-    pub fn write_arrow_batch(&mut self, batch: PyObject) -> PyResult<()> {
+    pub fn write_arrow_batch(&mut self, _batch: PyObject) -> PyResult<()> {
         // TODO: Implement Arrow batch conversion
         println!("Writing Arrow batch data");
         Ok(())
     }
 
     // Write Pandas DataFrame data
-    pub fn write_pandas(&mut self, df: PyObject) -> PyResult<()> {
+    pub fn write_pandas(&mut self, _df: PyObject) -> PyResult<()> {
         // TODO: Implement Pandas DataFrame conversion
         println!("Writing Pandas DataFrame data");
         Ok(())
@@ -158,52 +163,107 @@ impl AppendWriter {
 }
 
 // Scanner for reading log data from a Fluss table
-#[pyclass]
+#[pyclass(unsendable)]
 pub struct LogScanner {
-    inner: Arc<fcore::client::LogScanner>,
+    inner: fcore::client::LogScanner,
     table_info: fcore::metadata::TableInfo,
     table_schema: fcore::metadata::Schema,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
 }
 
 #[pymethods]
 impl LogScanner {
-    fn scan<'py>(
-        &self,
-        py: Python<'py>,
-        start_timestamp: Option<i64>,
-        end_timestamp: Option<i64>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let scanner = self.inner.clone();
-        let table_info = self.table_info.clone();
-        let table_schema = self.table_schema.clone();
+    fn subscribe(
+        &mut self,
+        _start_timestamp: Option<i64>,
+        _end_timestamp: Option<i64>,
+    ) -> PyResult<()> {
+        // TODO: support unbounded subscriptions
+        let end_timestamp = _end_timestamp
+            .ok_or_else(|| FlussError::new_err("Currently we only supports bounded operations. So the 'end_timestamp' must be specified"))?;
+    
+        self.start_timestamp = _start_timestamp;
+        self.end_timestamp = Some(end_timestamp);
 
-        future_into_py(py, async move {
-            let num_buckets = table_info.get_num_buckets();
+        let num_buckets = self.table_info.get_num_buckets();
+        let start_timestamp = self.start_timestamp; 
 
-            for bucket_id in 0..num_buckets {
-                let start_offset = match start_timestamp {
-                    Some(_ts) => {
-                        // TODO: implement listOffset in Rust client.
-                        0
-                    },
-                    None => 0, // earliest
-                };
+        for bucket_id in 0..num_buckets {
+            let start_offset = match start_timestamp {
+                Some(_ts) => {
+                    // TODO: implement listOffset in Rust client.
+                    0
+                },
+                None => 0, // earliest
+            };
 
-                scanner.subscribe(bucket_id, start_offset).await
-                    .map_err(|e| FlussError::new_err(e.to_string()))?;
+            TOKIO_RUNTIME.block_on(async {
+                self.inner.subscribe(bucket_id, start_offset).await
+                    .map_err(|e| FlussError::new_err(e.to_string()))
+            })?;
+        }
+
+        Ok(())
+    }
+
+    // Convert all data to Arrow Table
+    fn to_arrow(&mut self, py: Python) -> PyResult<PyObject> {
+        let mut all_batches = Vec::new();
+        
+        // Poll all data from the scanner
+        loop {
+            let batch_result = TOKIO_RUNTIME.block_on(async {
+                use std::time::Duration;
+                self.inner.poll(Duration::from_millis(1000)).await
+            });
+            
+            match batch_result {
+                Ok(scan_records) => {
+                    if scan_records.is_empty() {
+                        break; // No more data
+                    }
+                    
+                    // Convert ScanRecords to Arrow RecordBatch
+                    let arrow_batch = Utils::convert_scan_records_to_arrow(py, scan_records, &self.table_schema)?;
+                    all_batches.push(arrow_batch);
+                },
+                Err(e) => return Err(FlussError::new_err(e.to_string())),
             }
+        }
+        
+        if all_batches.is_empty() {
+            return Err(FlussError::new_err("No data available"));
+        }
+        
+        // Combine all batches into a single Arrow Table
+        Utils::combine_batches_to_table(py, all_batches)
+    }
 
-            let scan_result = ScanResult::new(
-                scanner,
-                table_schema,
-                start_timestamp,
-                end_timestamp,
-            );
+    // Convert all data to Pandas DataFrame
+    fn to_pandas(&mut self, py: Python) -> PyResult<PyObject> {
+        let arrow_table = self.to_arrow(py)?;
+        
+        // Convert Arrow Table to Pandas DataFrame using pyarrow
+        let df = arrow_table.call_method0(py, "to_pandas")?;
+        Ok(df)
+    }
 
-            Python::with_gil(|py| {
-                Py::new(py, scan_result)
-            })
-        })
+    // Return an Arrow RecordBatchReader for streaming data
+    fn to_arrow_batch_reader(&mut self, py: Python) -> PyResult<PyObject> {
+        // Create a streaming iterator that wraps our LogScanner
+        let iterator = LogScannerIterator::new(self, py)?;
+        
+        // Create Arrow schema for the reader
+        let schema = Utils::create_arrow_schema(py, &self.table_schema)?;
+        
+        // Create a Python RecordBatchReader that uses our iterator
+        let pyarrow = py.import("pyarrow")?;
+        let reader = pyarrow
+            .getattr("RecordBatchReader")?
+            .call_method1("from_batches", (schema, iterator))?;
+        
+        Ok(reader.into())
     }
 
     fn __repr__(&self) -> String {
@@ -212,13 +272,76 @@ impl LogScanner {
 }
 
 impl LogScanner {
-    // Create a LogScanner from a core scan
-    pub fn from_core(scanner: fcore::client::LogScanner, table_info: fcore::metadata::TableInfo) -> Self {
-        let schema = table_info.get_schema().clone();
+    // Create LogScanner from core LogScanner
+    pub fn from_core(
+        inner: fcore::client::LogScanner,
+        table_info: fcore::metadata::TableInfo,
+        table_schema: fcore::metadata::Schema,
+    ) -> Self {
         Self {
-            inner: Arc::new(scanner),
+            inner,
             table_info,
-            table_schema: schema,
+            table_schema,
+            start_timestamp: None,
+            end_timestamp: None,
         }
+    }
+}
+
+// Iterator for streaming Arrow RecordBatches from LogScanner
+#[pyclass]
+pub struct LogScannerIterator {
+    scanner_ptr: *mut LogScanner,
+    finished: bool,
+}
+
+#[pymethods]
+impl LogScannerIterator {
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+    
+    fn __next__(&mut self, py: Python) -> PyResult<Option<PyObject>> {
+        if self.finished {
+            return Ok(None); // StopIteration
+        }
+        
+        unsafe {
+            let scanner = &mut *self.scanner_ptr;
+            
+            let batch_result = TOKIO_RUNTIME.block_on(async {
+                use std::time::Duration;
+                scanner.inner.poll(Duration::from_millis(1000)).await
+            });
+            
+            match batch_result {
+                Ok(scan_records) => {
+                    if scan_records.is_empty() {
+                        self.finished = true;
+                        Ok(None) // StopIteration
+                    } else {
+                        let arrow_batch = Utils::convert_scan_records_to_arrow(py, scan_records, &scanner.table_schema)?;
+                        Ok(Some(arrow_batch))
+                    }
+                },
+                Err(e) => {
+                    self.finished = true;
+                    Err(FlussError::new_err(e.to_string()))
+                },
+            }
+        }
+    }
+}
+
+// Make it unsendable to avoid thread safety issues
+unsafe impl Send for LogScannerIterator {}
+unsafe impl Sync for LogScannerIterator {}
+
+impl LogScannerIterator {
+    fn new(scanner: &mut LogScanner, _py: Python) -> PyResult<Self> {
+        Ok(Self {
+            scanner_ptr: scanner as *mut LogScanner,
+            finished: false,
+        })
     }
 }

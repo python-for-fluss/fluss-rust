@@ -1,5 +1,7 @@
 pub use ::fluss as fcore;
 use pyo3::prelude::*;
+use once_cell::sync::Lazy;
+use tokio::runtime::Runtime;
 
 mod config;
 mod connection;
@@ -17,6 +19,13 @@ pub use types::*;
 pub use error::*;
 pub use utils::*;
 
+static TOKIO_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime")
+});
+
 #[pymodule]
 fn _fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register types
@@ -29,7 +38,6 @@ fn _fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FlussTable>()?;
     m.add_class::<AppendWriter>()?;
     m.add_class::<LogScanner>()?;
-    m.add_class::<ScanResult>()?;
     
     // Register exception types
     // todo: implement a seperate module for exceptions

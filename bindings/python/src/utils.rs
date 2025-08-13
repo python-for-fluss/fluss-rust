@@ -7,7 +7,7 @@ use crate::*;
 pub struct Utils;
 
 impl Utils {
-    /// Convert PyArrow schema to Rust Arrow schema
+    // Convert PyArrow schema to Rust Arrow schema
     pub fn pyarrow_to_arrow_schema(py_schema: &PyObject) -> PyResult<SchemaRef> {
         Python::with_gil(|py| {
             let schema_bound = py_schema.bind(py);
@@ -18,7 +18,7 @@ impl Utils {
         })
     }
 
-    /// Convert Arrow DataType to Fluss DataType
+    // Convert Arrow DataType to Fluss DataType
     pub fn arrow_type_to_fluss_type(arrow_type: &arrow::datatypes::DataType) -> PyResult<fcore::metadata::DataType> {
         use arrow::datatypes::DataType as ArrowDataType;
         use fcore::metadata::DataTypes;
@@ -101,25 +101,6 @@ impl Utils {
         }
     }
 
-    // Convert Fluss Schema to Arrow Schema (future use)
-    pub fn fluss_schema_to_arrow_schema(_fluss_schema: &fcore::metadata::Schema) -> PyResult<SchemaRef> {
-        // TODO: 实现 Fluss Schema 到 Arrow Schema 的转换
-        // 这个在将来需要将 Fluss Schema 转换回 PyArrow 时会用到
-        Err(FlussError::new_err("Not implemented yet".to_string()))
-    }
-
-    // Convert Arrow Schema to PyArrow Schema (future use)
-    pub fn arrow_schema_to_pyarrow(_arrow_schema: SchemaRef) -> PyResult<PyObject> {
-        // TODO: 实现 Arrow Schema 到 PyArrow Schema 的转换
-        // 这个在需要返回 PyArrow Schema 给 Python 时会用到
-        Python::with_gil(|py| Ok(py.None()))
-    }
-}
-
-// Format parsing utilities
-pub struct FormatUtils;
-
-impl FormatUtils {
     // Parse log format string to LogFormat enum
     pub fn parse_log_format(format_str: &str) -> PyResult<fcore::metadata::LogFormat> {
         fcore::metadata::LogFormat::parse(format_str)
@@ -130,5 +111,53 @@ impl FormatUtils {
     pub fn parse_kv_format(format_str: &str) -> PyResult<fcore::metadata::KvFormat> {
         fcore::metadata::KvFormat::parse(format_str)
             .map_err(|e| FlussError::new_err(format!("Invalid kv format '{}': {}", format_str, e)))
+    }
+
+    // Convert ScanRecords to Arrow RecordBatch
+    pub fn convert_scan_records_to_arrow(
+        py: Python, 
+        _scan_records: fcore::record::ScanRecords,
+        schema: &fcore::metadata::Schema,
+    ) -> PyResult<PyObject> {
+        let pyarrow = py.import("pyarrow")?;
+        
+        // Convert ScanRecords to Arrow format
+        // For now, return empty batch - this needs actual implementation based on your schema
+        let arrow_schema = Self::create_arrow_schema(py, schema)?;
+        
+        // Create empty arrays for each field in the schema
+        let builtins = py.import("builtins")?;
+        let empty_list = builtins.getattr("list")?.call0()?;
+        let empty_batch = pyarrow
+            .getattr("RecordBatch")?
+            .call_method1("from_arrays", (empty_list, arrow_schema))?;
+        
+        Ok(empty_batch.into())
+    }
+    
+    // Create Arrow schema from table schema
+    pub fn create_arrow_schema(py: Python, _schema: &fcore::metadata::Schema) -> PyResult<PyObject> {
+        let pyarrow = py.import("pyarrow")?;
+        
+        // Create a simple schema for now - this needs actual implementation based on your table schema
+        let builtins = py.import("builtins")?;
+        let fields = builtins.getattr("list")?.call0()?;
+        let schema = pyarrow
+            .getattr("schema")?
+            .call1((fields,))?;
+        
+        Ok(schema.into())
+    }
+    
+    // Combine multiple Arrow batches into a single Table
+    pub fn combine_batches_to_table(py: Python, batches: Vec<PyObject>) -> PyResult<PyObject> {
+        let pyarrow = py.import("pyarrow")?;
+        
+        // Use pyarrow.Table.from_batches to combine batches
+        let table = pyarrow
+            .getattr("Table")?
+            .call_method1("from_batches", (batches,))?;
+        
+        Ok(table.into())
     }
 }

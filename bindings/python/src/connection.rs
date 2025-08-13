@@ -51,7 +51,7 @@ impl FlussConnection {
     // Get a table
     fn get_table<'py>(&self, py: Python<'py>, table_path: &TablePath) -> PyResult<Bound<'py, PyAny>> {
         let client = self.inner.clone();
-        let core_path = table_path.to_core();
+        let core_path = table_path.to_core().clone();
 
         future_into_py(py, async move {
             let metadata = client.get_metadata();
