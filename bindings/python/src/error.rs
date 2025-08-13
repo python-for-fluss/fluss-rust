@@ -54,7 +54,7 @@ impl From<FlussRustError> for FlussError {
     fn from(error: FlussRustError) -> Self {
         FlussError {
             message: error.to_string(),
-            error_code: None, // You can map specific error codes if needed
+            error_code: None,
         }
     }
 }

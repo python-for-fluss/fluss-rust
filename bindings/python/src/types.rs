@@ -1,8 +1,11 @@
 use pyo3::prelude::*;
 use crate::*;
 use pyo3::types::PyDict;
+use std::{collections::HashMap, time::Duration};
+use pyo3_async_runtimes::tokio::future_into_py;
+use std::sync::Arc;
+use fcore::row::InternalRow;
 
-// Represents a table path in Fluss
 #[pyclass]
 #[derive(Clone)]
 pub struct TablePath {
@@ -143,7 +146,6 @@ pub struct TableDistribution {
 
 #[pymethods]
 impl TableDistribution {
-    // Do we need to expose these?
     fn bucket_keys(&self) -> Vec<String> {
         self.inner.bucket_keys().to_vec()
     }
@@ -368,27 +370,28 @@ impl TableInfo {
 // Result of a table scan operation
 #[pyclass]
 pub struct ScanResult {
-    // TODO: Store actual scan results
-    current_index: usize,
-    records: Vec<fcore::record::ScanRecord>, // Sample data for testing
+    scanner: Arc<fcore::client::LogScanner>,
+    table_schema: fcore::metadata::Schema,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    cached_records: Option<HashMap<fcore::metadata::TableBucket, Vec<fcore::record::ScanRecord>>>,
 }
 
 #[pymethods]
 impl ScanResult {
-    #[new]
-    pub fn new() -> Self {
-        Self {
-            current_index: 0,
-            records: vec![], // Initialize with empty data
-        }
-    }
-
-    // Convert to PyArrow Table
+    // Convert to PyArrow Table -- This fetches all data
     pub fn to_arrow(&self) -> PyResult<PyObject> {
-        // TODO: Implement actual conversion to PyArrow Table
-        Python::with_gil(|py| {
-            println!("Converting to PyArrow Table");
-            Ok(py.None())
+        let scanner = self.scanner.clone();
+        let schema = self.table_schema.clone();
+        let start_ts = self.start_timestamp;
+        let end_ts = self.end_timestamp;
+
+        future_into_py(py, async move{
+            let all_records = Self::fetch_all_records_async(scanner, end_ts).await?;
+
+            Python::with_gil(|py| {
+                Self::records_to_arrow_table(py, all_records, schema)
+            })
         })
     }
 
@@ -442,5 +445,203 @@ impl ScanResult {
 
     fn __repr__(&self) -> String {
         format!("ScanResult(rows={})", self.records.len())
+    }
+}
+
+impl ScanResult {
+    pub fn new(
+        scanner: Arc<fcore::client::LogScanner>,
+        schema: fcore::metadata::Schema,
+        start_timestamp: Option<i64>,
+        end_timestamp: Option<i64>,
+    ) -> Self {
+        Self {
+            scanner,
+            table_schema: schema,
+            start_timestamp,
+            end_timestamp,
+            cached_records: None,
+        }
+    }
+
+    async fn fetch_all_records_async(
+        scanner: Arc<fcore::client::LogScanner>,
+        end_ts: Option<i64>,
+    ) -> Result<HashMap<fcore::metadata::TableBucket, Vec<fcore::record::ScanRecord>>, FlussError> {
+        let mut all_records: HashMap<fluss::metadata::TableBucket, Vec<fcore::record::ScanRecord>> = HashMap::new();
+        let timeout = Duration::from_millis(1000);
+        
+        match end_ts {
+            Some(_ts) => {
+                loop {
+                    let scan_records = scanner.poll(timeout).await?;
+
+                    if scan_records.is_empty() {
+                        break;
+                    }
+
+                    let mut reached_end = false;
+                    for (bucket, records) in scan_records.into_records().into_iter() {
+                        let mut filtered_records = Vec::new();
+
+                        for record in records {
+                            if record.timestamp() <= _ts {
+                                filtered_records.push(record);
+                            } else {
+                                reached_end = true;
+                                break;
+                            }
+                        }
+
+                        if !filtered_records.is_empty() {
+                            all_records.entry(bucket)
+                                .or_insert_with(Vec::new)
+                                .extend(filtered_records);
+                        }
+
+                        if reached_end {
+                            break;
+                        }
+                    }
+                }
+            },
+            None => {
+                // TODO: implement unbounded scan
+                return Err(FlussError {
+                    message: "Unbounded scans are not yet implemented".to_string(),
+                    error_code: None,
+                });
+            }
+        }
+
+        Ok(all_records)
+    }
+
+    fn records_to_arrow_table(
+        py: Python, 
+        records: &HashMap<fcore::metadata::TableBucket, Vec<fcore::record::ScanRecord>>,
+        schema: &fcore::metadata::Schema,
+    ) -> PyResult<PyObject> {
+        // 展平所有记录
+        let mut all_records = Vec::new();
+        for record_vec in records.values() {
+            all_records.extend(record_vec.iter());
+        }
+
+        if all_records.is_empty() {
+            // 返回空的 PyArrow Table
+            let pyarrow = py.import("pyarrow")?;
+            let empty_schema = Self::create_pyarrow_schema(py, schema)?;
+            let empty_table = pyarrow.call_method1("table", (Vec::<PyObject>::new(), empty_schema))?;
+            return Ok(empty_table.into());
+        }
+
+        let python_records = Self::scan_records_to_python_data(py, &all_records, schema)?;
+        
+        // 创建 PyArrow Table
+        let pyarrow = py.import("pyarrow")?;
+        let table = pyarrow.call_method1("table", (python_records,))?;
+        Ok(table.into())
+    }
+
+    /// 创建 PyArrow Schema
+    fn create_pyarrow_schema(py: Python, schema: &fcore::metadata::Schema) -> PyResult<PyObject> {
+        let pyarrow = py.import("pyarrow")?;
+        
+        let mut fields = Vec::new();
+        
+        // 数据列
+        for column in schema.columns() {
+            let field_args = (
+                column.name(),
+                Self::fluss_type_to_pyarrow_type(py, column.data_type())?,
+                column.data_type().is_nullable(),
+            );
+            let field = pyarrow.call_method1("field", field_args)?;
+            fields.push(field);
+        }
+        
+        // 元数据列
+        let int64_type = pyarrow.call_method0("int64")?;
+        let string_type = pyarrow.call_method0("string")?;
+        
+        fields.push(pyarrow.call_method1("field", ("__offset__", &int64_type, false))?);
+        fields.push(pyarrow.call_method1("field", ("__timestamp__", &int64_type, false))?);
+        fields.push(pyarrow.call_method1("field", ("__change_type__", &string_type, false))?);
+        
+        let schema = pyarrow.call_method1("schema", (fields,))?;
+        Ok(schema.into())
+    }
+
+    /// 转换 Fluss 类型为 PyArrow 类型
+    fn fluss_type_to_pyarrow_type(py: Python, data_type: &fcore::metadata::DataType) -> PyResult<PyObject> {
+        let pyarrow = py.import("pyarrow")?;
+        
+        let arrow_type = match data_type {
+            fcore::metadata::DataType::Boolean(_) => pyarrow.call_method0("bool_")?,
+            fcore::metadata::DataType::TinyInt(_) => pyarrow.call_method0("int8")?,
+            fcore::metadata::DataType::SmallInt(_) => pyarrow.call_method0("int16")?,
+            fcore::metadata::DataType::Int(_) => pyarrow.call_method0("int32")?,
+            fcore::metadata::DataType::BigInt(_) => pyarrow.call_method0("int64")?,
+            fcore::metadata::DataType::Float(_) => pyarrow.call_method0("float32")?,
+            fcore::metadata::DataType::Double(_) => pyarrow.call_method0("float64")?,
+            fcore::metadata::DataType::String(_) => pyarrow.call_method0("string")?,
+            fcore::metadata::DataType::Bytes(_) => pyarrow.call_method0("binary")?,
+            _ => pyarrow.call_method0("string")?, // 默认字符串类型
+        };
+        
+        Ok(arrow_type.into())
+    }
+
+    fn scan_records_to_python_data(
+        py: Python,
+        records: &[&fcore::record::ScanRecord],
+        schema: &fcore::metadata::Schema,
+    ) -> PyResult<Vec<PyObject>> {
+        let mut python_records = Vec::new();
+        
+        for record in records {
+            let mut record_dict = std::collections::HashMap::new();
+            let row = record.row();
+            
+            // 数据列
+            for (idx, column) in schema.columns().iter().enumerate() {
+                let value = if row.is_null_at(idx) {
+                    py.None()
+                } else {
+                    Self::extract_column_value(py, row, idx, column.data_type())?
+                };
+                record_dict.insert(column.name().to_string(), value);
+            }
+            
+            // 元数据列
+            record_dict.insert("__offset__".to_string(), record.offset().into_py(py));
+            record_dict.insert("__timestamp__".to_string(), record.timestamp().into_py(py));
+            record_dict.insert("__change_type__".to_string(), record.change_type().to_string().into_py(py));
+            
+            python_records.push(record_dict.into_py(py));
+        }
+        
+        Ok(python_records)
+    }
+
+    /// 提取列值
+    fn extract_column_value(
+        py: Python,
+        row: &fcore::row::ColumnarRow,
+        idx: usize,
+        data_type: &fcore::metadata::DataType,
+    ) -> PyResult<PyObject> {
+        
+        match data_type {
+            fcore::metadata::DataType::Int(_) => Ok(row.get_int(idx).into_py(py)),
+            fcore::metadata::DataType::BigInt(_) => Ok(row.get_long(idx).into_py(py)),
+            fcore::metadata::DataType::Float(_) => Ok(row.get_float(idx).into_py(py)),
+            fcore::metadata::DataType::Double(_) => Ok(row.get_double(idx).into_py(py)),
+            fcore::metadata::DataType::Boolean(_) => Ok(row.get_boolean(idx).into_py(py)),
+            fcore::metadata::DataType::String(_) => Ok(row.get_string(idx).into_py(py)),
+            fcore::metadata::DataType::Bytes(_) => Ok(row.get_bytes(idx).into_py(py)),
+            _ => Ok(format!("Unsupported: {:?}", data_type).into_py(py)),
+        }
     }
 }

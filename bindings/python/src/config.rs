@@ -12,8 +12,8 @@ pub struct Config {
 impl Config {
     // Create a new Config with bootstrap server and request timeout
     #[new]
-    #[pyo3(signature = (bootstrap_server, request_timeout_ms = 30000))]
-    fn new(bootstrap_server: String, request_timeout_ms: Option<u32>) -> Self {
+    #[pyo3(signature = (bootstrap_server))]
+    fn new(bootstrap_server: String) -> Self {
         let mut config = fluss::config::Config::default();
         config.bootstrap_server = Some(bootstrap_server);
         

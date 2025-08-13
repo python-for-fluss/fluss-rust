@@ -17,7 +17,6 @@ pub use types::*;
 pub use error::*;
 pub use utils::*;
 
-/// A Python module implemented in Rust.
 #[pymodule]
 fn _fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register types
@@ -33,6 +32,11 @@ fn _fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ScanResult>()?;
     
     // Register exception types
+    // todo: implement a seperate module for exceptions
+    // something like this:
+    // let exception_module = PyModule::new(py, "exceptions")?;
+    // exception_module.add("Error", py.get_type::<Error>())?;
+    // m.add_submodule(&exception_module)?;
     m.add("FlussError", m.py().get_type::<FlussError>())?;
     
     Ok(())

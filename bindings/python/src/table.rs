@@ -116,9 +116,9 @@ pub struct AppendWriter {
 #[pymethods]
 impl AppendWriter {
     // Write Arrow table data
-    pub fn new_log_scanner(&mut self, table: PyObject) -> PyResult<()> {
-        // TODO: Implement Arrow table conversion
-        println!("Writing Arrow table data");
+    pub fn write_arrow(&mut self, batch: PyObject) -> PyResult<()> {
+        // TODO: Implement Arrow batch conversion
+        println!("Writing Arrow Table data");
         Ok(())
     }
 
@@ -160,40 +160,65 @@ impl AppendWriter {
 // Scanner for reading log data from a Fluss table
 #[pyclass]
 pub struct LogScanner {
-    // TODO: Store actual scanner
+    inner: Arc<fcore::client::LogScanner>,
+    table_info: fcore::metadata::TableInfo,
+    table_schema: fcore::metadata::Schema,
 }
 
 #[pymethods]
 impl LogScanner {
-    // Create a new LogScanner (internal use)
-    #[new]
-    pub fn new() -> Self {
-        Self {}
-    }
+    fn scan<'py>(
+        &self,
+        py: Python<'py>,
+        start_timestamp: Option<i64>,
+        end_timestamp: Option<i64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let scanner = self.inner.clone();
+        let table_info = self.table_info.clone();
+        let table_schema = self.table_schema.clone();
 
-    // Scan from the earliest timestamp to the specified end timestamp
-    pub fn scan_earliest(&self, end_timestamp: u64) -> PyResult<ScanResult> {
-        // TODO: Implement actual scanning
-        println!("Scanning from earliest to timestamp: {}", end_timestamp);
-        Ok(ScanResult::new())
-    }
+        future_into_py(py, async move {
+            let num_buckets = table_info.get_num_buckets();
 
-    // Scan from start timestamp to end timestamp
-    pub fn scan_from_timestamp(&self, start_timestamp: u64, end_timestamp: u64) -> PyResult<ScanResult> {
-        // TODO: Implement actual scanning
-        println!("Scanning from {} to {}", start_timestamp, end_timestamp);
-        Ok(ScanResult::new())
+            for bucket_id in 0..num_buckets {
+                let start_offset = match start_timestamp {
+                    Some(_ts) => {
+                        // TODO: implement listOffset in Rust client.
+                        0
+                    },
+                    None => 0, // earliest
+                };
+
+                scanner.subscribe(bucket_id, start_offset).await
+                    .map_err(|e| FlussError::new_err(e.to_string()))?;
+            }
+
+            let scan_result = ScanResult::new(
+                scanner,
+                table_schema,
+                start_timestamp,
+                end_timestamp,
+            );
+
+            Python::with_gil(|py| {
+                Py::new(py, scan_result)
+            })
+        })
     }
 
     fn __repr__(&self) -> String {
-        "LogScanner()".to_string()
+        format!("LogScanner(table={})", self.table_info.table_path)
     }
 }
 
 impl LogScanner {
     // Create a LogScanner from a core scan
-    pub fn from_core(scan: fcore::client::LogScanner) -> Self {
-        LogScanner {
+    pub fn from_core(scanner: fcore::client::LogScanner, table_info: fcore::metadata::TableInfo) -> Self {
+        let schema = table_info.get_schema().clone();
+        Self {
+            inner: Arc::new(scanner),
+            table_info,
+            table_schema: schema,
         }
     }
 }
