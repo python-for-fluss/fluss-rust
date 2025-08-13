@@ -10,7 +10,7 @@ pub struct Config {
 
 #[pymethods]
 impl Config {
-    // Create a new Config with bootstrap server and request timeout
+    // Create a new Config with bootstrap server
     #[new]
     #[pyo3(signature = (bootstrap_server))]
     fn new(bootstrap_server: String) -> Self {
