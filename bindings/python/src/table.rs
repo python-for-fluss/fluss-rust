@@ -164,10 +164,17 @@ impl AppendWriter {
 
     // Write Pandas DataFrame data
     pub fn write_pandas(&mut self, py: Python, df: PyObject) -> PyResult<()> {
-        // Convert Pandas DataFrame to Arrow Table first
-        let arrow_table = df.call_method0(py, "to_arrow")?;
-        // Then write the Arrow Table
-        self.write_arrow(py, arrow_table)
+        // Import pyarrow module
+        let pyarrow = py.import("pyarrow")?;
+        
+        // Get the Table class from pyarrow module
+        let table_class = pyarrow.getattr("Table")?;
+        
+        // Call Table.from_pandas(df) - from_pandas is a class method
+        let pa_table = table_class.call_method1("from_pandas", (df,))?;
+        
+        // Then call write_arrow with the converted table
+        self.write_arrow(py, pa_table.into_py(py))
     }
 
     // Append a single row from a Python dictionary

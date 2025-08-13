@@ -42,7 +42,7 @@ async def main():
     print(f"Got admin client: {admin}")
 
     # Create a Fluss table
-    table_path = fluss.TablePath("fluss", "users_table_2")
+    table_path = fluss.TablePath("fluss", "users_table_5")
     
     try:
         await admin.create_table(table_path, table_descriptor, True)
