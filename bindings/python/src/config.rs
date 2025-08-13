@@ -16,6 +16,8 @@ impl Config {
     fn new(bootstrap_server: String) -> Self {
         let mut config = fluss::config::Config::default();
         config.bootstrap_server = Some(bootstrap_server);
+        // Ensure writer_acks has a valid default value
+        config.writer_acks = "all".to_string();
         
         Self { inner: config }
     }

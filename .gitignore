@@ -26,3 +26,5 @@ bindings/python/python/fluss_python/*.so
 bindings/python/python/fluss_python/*.dylib
 bindings/python/python/fluss_python/*.pyd
 bindings/python/python/fluss_python/fluss_python.cpython-*
+bindings/python/python/fluss_python/__pycache__/
+*.pyc

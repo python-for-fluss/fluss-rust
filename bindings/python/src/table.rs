@@ -223,7 +223,21 @@ impl AppendWriter {
 
     // Convert Python value to Datum
     fn convert_python_value_to_datum(&self, py: Python, value: PyObject) -> PyResult<fcore::row::Datum<'static>> {
-        use fcore::row::{Datum, F64};
+        use fcore::row::{Datum, F32, F64};
+        
+        // First try to extract scalar values from Arrow types
+        let obj_ref = value.bind(py);
+        let type_name = obj_ref.get_type().name()?;
+        
+        // Handle Arrow scalar types
+        let type_name_str = type_name.to_str().unwrap_or("");
+        if type_name_str.contains("Scalar") {
+            // Try to get the Python value from Arrow scalar
+            if let Ok(py_value) = obj_ref.call_method0("as_py") {
+                // Recursively convert the extracted Python value
+                return self.convert_python_value_to_datum(py, py_value.to_object(py));
+            }
+        }
         
         // Check for None (null)
         if value.is_none(py) {
@@ -243,6 +257,10 @@ impl AppendWriter {
             return Ok(Datum::Int64(int_val));
         }
         
+        if let Ok(float_val) = value.extract::<f32>(py) {
+            return Ok(Datum::Float32(F32::from(float_val)));
+        }
+        
         if let Ok(float_val) = value.extract::<f64>(py) {
             return Ok(Datum::Float64(F64::from(float_val)));
         }
@@ -257,7 +275,7 @@ impl AppendWriter {
         // If we can't convert, return an error
         Err(FlussError::new_err(format!(
             "Cannot convert Python value to Datum: {:?}", 
-            value.bind(py).get_type().name()
+            type_name
         )))
     }
 }

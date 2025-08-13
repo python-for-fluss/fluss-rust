@@ -8,8 +8,9 @@ async def main():
     # Create connection configuration
     config = fluss.Config("127.0.0.1:9123")
     
-    # Create connection 
-    conn = fluss.FlussConnection(config)
+    # Create connection using the static connect method
+    conn = await fluss.FlussConnection.connect(config)
+    print(f"Connected to Fluss: {conn}")
 
     # Sample data to insert
     data = {
@@ -30,14 +31,18 @@ async def main():
     # Create a PyArrow schema
     schema = pa.schema(fields)
 
+    # Create a Fluss Schema first (this is what TableDescriptor expects)
+    fluss_schema = fluss.Schema(schema)
+
     # Create a Fluss TableDescriptor
-    table_descriptor = fluss.TableDescriptor(schema)
+    table_descriptor = fluss.TableDescriptor(fluss_schema)
 
     # Get the admin for Fluss
     admin = await conn.get_admin()
+    print(f"Got admin client: {admin}")
 
     # Create a Fluss table
-    table_path = fluss.TablePath("test_db", "users_table")
+    table_path = fluss.TablePath("fluss", "users_table_2")
     
     try:
         await admin.create_table(table_path, table_descriptor, True)
@@ -129,33 +134,44 @@ async def main():
     print("\n--- Scanning table ---")
     try:
         log_scanner = await table.new_log_scanner()
+        print(f"Created log scanner: {log_scanner}")
+        
+        # Subscribe to scan from earliest to current timestamp
         cur_timestamp = time.time_ns() // 1_000  # current timestamp in microseconds
+        log_scanner.subscribe(None, cur_timestamp)  # start_timestamp=None (earliest), end_timestamp=current
         
-        # Scan from the earliest timestamp to the current timestamp
-        result = log_scanner.scan_earliest(cur_timestamp)
-        
-        print("Scanning results:")
-        row_count = 0
-        for row in result:
-            print(f"Row {row_count + 1}: {row}")
-            row_count += 1
-            if row_count >= 5:  # Limit output to first 5 rows
-                print("... (showing first 5 rows)")
-                break
+        print("Scanning results using to_arrow():")
         
         # Try to get as PyArrow Table
         try:
-            pa_table_result = result.to_arrow()
+            pa_table_result = log_scanner.to_arrow()
             print(f"\nAs PyArrow Table: {pa_table_result}")
         except Exception as e:
             print(f"Could not convert to PyArrow: {e}")
         
-        # Try to get as Pandas DataFrame
+        # Try to get as Pandas DataFrame  
         try:
-            df_result = result.to_pandas()
+            df_result = log_scanner.to_pandas()
             print(f"\nAs Pandas DataFrame:\n{df_result}")
         except Exception as e:
             print(f"Could not convert to Pandas: {e}")
+
+        # Try to get as Arrow RecordBatchReader for streaming
+        try:
+            reader = log_scanner.to_arrow_batch_reader()
+            print(f"\nAs Arrow RecordBatchReader: {reader}")
+            
+            # Iterate through batches
+            batch_count = 0
+            for batch in reader:
+                print(f"Batch {batch_count + 1}: {batch}")
+                batch_count += 1
+                if batch_count >= 3:  # Limit to first 3 batches
+                    print("... (showing first 3 batches)")
+                    break
+                    
+        except Exception as e:
+            print(f"Could not get RecordBatchReader: {e}")
 
     except Exception as e:
         print(f"Error during scanning: {e}")

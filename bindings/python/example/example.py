@@ -3,7 +3,7 @@ import pyarrow as pa
 import pandas as pd
 import time
 
-config = fluss.Config("127.0.0.1:9123", 30)
+config = fluss.Config("127.0.0.1:9123")
 with fluss.FlussConnection(config) as conn:
 
     # Sample data to insert
@@ -30,7 +30,7 @@ with fluss.FlussConnection(config) as conn:
     admin = conn.get_admin()
 
     # Create a Fluss table
-    table_path = fluss.TablePath("fluss", "my_table")
+    table_path = fluss.TablePath("fluss", "my_table_1")
     admin.create_table(table_path, table_descriptor, True)
 
     # Get table information via admin

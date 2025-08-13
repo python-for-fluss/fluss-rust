@@ -11,7 +11,20 @@ pub struct FlussConnection {
 
 #[pymethods]
 impl FlussConnection {
-    // Create a new FlussConnection
+    // Create a new FlussConnection from a config
+    #[new]
+    fn new(config: &Config) -> PyResult<Self> {
+        // For now, we'll create a placeholder connection
+        // In a real implementation, we'd establish the connection here
+        let rust_config = config.get_core_config();
+        
+        // We'll need to use a different approach since we can't do async in __new__
+        // For now, create a mock connection
+        // This is a limitation - we might need to refactor this later
+        Err(FlussError::new_err("FlussConnection constructor not yet implemented. Use FlussConnection.connect() instead."))
+    }
+
+    // Create a new FlussConnection (async)
     #[staticmethod]
     fn connect<'py>(py: Python<'py>, config: &Config) -> PyResult<Bound<'py, PyAny>> {
         let rust_config = config.get_core_config();
