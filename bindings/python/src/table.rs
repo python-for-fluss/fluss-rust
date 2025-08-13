@@ -120,36 +120,96 @@ pub struct AppendWriter {
 
 #[pymethods]
 impl AppendWriter {
-    // Write Arrow table data
-    pub fn write_arrow(&mut self, _batch: PyObject) -> PyResult<()> {
-        // TODO: Implement Arrow batch conversion
-        println!("Writing Arrow Table data");
+        // Write Arrow table data
+    pub fn write_arrow(&mut self, py: Python, table: PyObject) -> PyResult<()> {
+        // Convert Arrow Table to batches and write each batch
+        let batches = table.call_method0(py, "to_batches")?;
+        let batch_list: Vec<PyObject> = batches.extract(py)?;
+        
+        for batch in batch_list {
+            self.write_arrow_batch(py, batch)?;
+        }
         Ok(())
     }
 
     // Write Arrow batch data
-    pub fn write_arrow_batch(&mut self, _batch: PyObject) -> PyResult<()> {
-        // TODO: Implement Arrow batch conversion
-        println!("Writing Arrow batch data");
+    pub fn write_arrow_batch(&mut self, py: Python, batch: PyObject) -> PyResult<()> {
+        // Extract number of rows and columns from the Arrow batch
+        let num_rows: usize = batch.getattr(py, "num_rows")?.extract(py)?;
+        let num_columns: usize = batch.getattr(py, "num_columns")?.extract(py)?;
+        
+        // Process each row in the batch
+        for row_idx in 0..num_rows {
+            let mut generic_row = fcore::row::GenericRow::new();
+            
+            // Extract values for each column in this row
+            for col_idx in 0..num_columns {
+                let column = batch.call_method1(py, "column", (col_idx,))?;
+                let value = column.call_method1(py, "__getitem__", (row_idx,))?;
+                
+                // Convert the Python value to a Datum and add to the row
+                let datum = self.convert_python_value_to_datum(py, value)?;
+                generic_row.set_field(col_idx, datum);
+            }
+            
+            // Append this row using the async append method
+            TOKIO_RUNTIME.block_on(async {
+                self.inner.append(generic_row).await
+                    .map_err(|e| FlussError::new_err(e.to_string()))
+            })?;
+        }
+        
         Ok(())
     }
 
     // Write Pandas DataFrame data
-    pub fn write_pandas(&mut self, _df: PyObject) -> PyResult<()> {
-        // TODO: Implement Pandas DataFrame conversion
-        println!("Writing Pandas DataFrame data");
-        Ok(())
+    pub fn write_pandas(&mut self, py: Python, df: PyObject) -> PyResult<()> {
+        // Convert Pandas DataFrame to Arrow Table first
+        let arrow_table = df.call_method0(py, "to_arrow")?;
+        // Then write the Arrow Table
+        self.write_arrow(py, arrow_table)
+    }
+
+    // Append a single row from a Python dictionary
+    pub fn append_row(&mut self, py: Python, row_dict: PyObject) -> PyResult<()> {
+        let mut generic_row = fcore::row::GenericRow::new();
+        
+        // Extract dictionary items as (key, value) pairs
+        let dict_ref = row_dict.bind(py);
+        let items = dict_ref.call_method0("items")?;
+        
+        let mut field_idx = 0;
+        for item in items.try_iter()? {
+            let (_, value) = item?.extract::<(String, PyObject)>()?;
+            let datum = self.convert_python_value_to_datum(py, value)?;
+            generic_row.set_field(field_idx, datum);
+            field_idx += 1;
+        }
+        
+        // Append the row
+        TOKIO_RUNTIME.block_on(async {
+            self.inner.append(generic_row).await
+                .map_err(|e| FlussError::new_err(e.to_string()))
+        })
+    }
+
+    // Flush any pending data
+    pub fn flush(&mut self) -> PyResult<()> {
+        TOKIO_RUNTIME.block_on(async {
+            self.inner.flush().await
+                .map_err(|e| FlussError::new_err(e.to_string()))
+        })
     }
 
     // Close the writer and flush any pending data
     pub fn close(&mut self) -> PyResult<()> {
-        // TODO: Implement actual writer closing
-        println!("Closing TableWriter");
+        self.flush()?;
+        println!("AppendWriter closed");
         Ok(())
     }
 
     fn __repr__(&self) -> String {
-        "TableWriter()".to_string()
+        "AppendWriter()".to_string()
     }
 }
 
@@ -159,6 +219,46 @@ impl AppendWriter {
         Self {
             inner: append,
         }
+    }
+
+    // Convert Python value to Datum
+    fn convert_python_value_to_datum(&self, py: Python, value: PyObject) -> PyResult<fcore::row::Datum<'static>> {
+        use fcore::row::{Datum, F64};
+        
+        // Check for None (null)
+        if value.is_none(py) {
+            return Ok(Datum::Null);
+        }
+        
+        // Try to extract different types
+        if let Ok(bool_val) = value.extract::<bool>(py) {
+            return Ok(Datum::Bool(bool_val));
+        }
+        
+        if let Ok(int_val) = value.extract::<i32>(py) {
+            return Ok(Datum::Int32(int_val));
+        }
+        
+        if let Ok(int_val) = value.extract::<i64>(py) {
+            return Ok(Datum::Int64(int_val));
+        }
+        
+        if let Ok(float_val) = value.extract::<f64>(py) {
+            return Ok(Datum::Float64(F64::from(float_val)));
+        }
+        
+        if let Ok(str_val) = value.extract::<String>(py) {
+            // Convert String to &'static str by leaking memory
+            // This is a simplified approach - in production, you might want better lifetime management
+            let leaked_str: &'static str = Box::leak(str_val.into_boxed_str());
+            return Ok(Datum::String(leaked_str));
+        }
+        
+        // If we can't convert, return an error
+        Err(FlussError::new_err(format!(
+            "Cannot convert Python value to Datum: {:?}", 
+            value.bind(py).get_type().name()
+        )))
     }
 }
 

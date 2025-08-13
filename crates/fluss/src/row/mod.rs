@@ -18,10 +18,10 @@
 use crate::row::datum::Datum;
 
 mod column;
-
 mod datum;
 
 pub use column::*;
+pub use datum::*;
 
 pub trait InternalRow {
     /// Returns the number of fields in this row
