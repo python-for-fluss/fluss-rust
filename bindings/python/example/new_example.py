@@ -42,7 +42,7 @@ async def main():
     print(f"Got admin client: {admin}")
 
     # Create a Fluss table
-    table_path = fluss.TablePath("fluss", "users_table_5")
+    table_path = fluss.TablePath("fluss", "users_table_6")
     
     try:
         await admin.create_table(table_path, table_descriptor, True)
@@ -133,7 +133,8 @@ async def main():
     # Now scan the table to verify data was written
     print("\n--- Scanning table ---")
     try:
-        log_scanner = await table.new_log_scanner()
+        # TODO: support async log scanner
+        log_scanner = table.new_log_scanner_sync()
         print(f"Created log scanner: {log_scanner}")
         
         # Subscribe to scan from earliest to current timestamp

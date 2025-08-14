@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use arrow::datatypes::{Schema as ArrowSchema, SchemaRef};
 use std::sync::Arc;
+use arrow_pyarrow::ToPyArrow;
 use crate::*;
 
 /// Utilities for schema conversion between PyArrow, Arrow, and Fluss
@@ -115,48 +116,45 @@ impl Utils {
 
     // Convert ScanRecords to Arrow RecordBatch
     pub fn convert_scan_records_to_arrow(
-        py: Python, 
         _scan_records: fcore::record::ScanRecords,
-        schema: &fcore::metadata::Schema,
-    ) -> PyResult<PyObject> {
-        let pyarrow = py.import("pyarrow")?;
-        
-        // Convert ScanRecords to Arrow format
-        // For now, return empty batch - this needs actual implementation based on your schema
-        let arrow_schema = Self::create_arrow_schema(py, schema)?;
-        
-        // Create empty arrays for each field in the schema
-        let builtins = py.import("builtins")?;
-        let empty_list = builtins.getattr("list")?.call0()?;
-        let empty_batch = pyarrow
-            .getattr("RecordBatch")?
-            .call_method1("from_arrays", (empty_list, arrow_schema))?;
-        
-        Ok(empty_batch.into())
-    }
-    
-    // Create Arrow schema from table schema
-    pub fn create_arrow_schema(py: Python, _schema: &fcore::metadata::Schema) -> PyResult<PyObject> {
-        let pyarrow = py.import("pyarrow")?;
-        
-        // Create a simple schema for now - this needs actual implementation based on your table schema
-        let builtins = py.import("builtins")?;
-        let fields = builtins.getattr("list")?.call0()?;
-        let schema = pyarrow
-            .getattr("schema")?
-            .call1((fields,))?;
-        
-        Ok(schema.into())
+    ) -> Vec<Arc<arrow::record_batch::RecordBatch>> {
+        let mut result = Vec::new();
+        for(_, records) in _scan_records.into_records() {
+            for record in records {
+                let columnar_row = record.row();
+                let row_id = columnar_row.get_row_id();
+                if row_id == 0 {
+                    let record_batch = columnar_row.get_record_batch();
+                    result.push(record_batch.clone());
+                }
+            }
+        }
+        result
     }
     
     // Combine multiple Arrow batches into a single Table
-    pub fn combine_batches_to_table(py: Python, batches: Vec<PyObject>) -> PyResult<PyObject> {
+    pub fn combine_batches_to_table(py: Python, batches: Vec<Arc<arrow::record_batch::RecordBatch>>) -> PyResult<PyObject> {
+        println!("combine_batches_to_table: Combining {} batches", batches.len());
+        if batches.is_empty() {
+            return Err(FlussError::new_err("No batches to combine"));
+        }
+        
+        // Convert Rust Arrow RecordBatch to PyObject
+        let py_batches: Result<Vec<PyObject>, _> = batches.iter()
+            .map(|batch| {
+                batch.as_ref().to_pyarrow(py)
+                    .map_err(|e| FlussError::new_err(format!("Failed to convert RecordBatch to PyObject: {}", e)))
+            })
+            .collect();
+        
+        let py_batches = py_batches?;
+        
         let pyarrow = py.import("pyarrow")?;
         
         // Use pyarrow.Table.from_batches to combine batches
         let table = pyarrow
             .getattr("Table")?
-            .call_method1("from_batches", (batches,))?;
+            .call_method1("from_batches", (py_batches,))?;
         
         Ok(table.into())
     }
