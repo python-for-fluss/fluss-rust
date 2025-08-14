@@ -171,20 +171,6 @@ Used for writing data to tables, supports PyArrow and Pandas
 
 Used for scanning table log data
 
-#### `ScanResult`
-
-Scan results, supports conversion to PyArrow, Pandas or DuckDB
-
-## Development Guide
-
-### Adding New Features
-
-1. Implement functionality in corresponding Rust modules
-2. Use `#[pyclass]` and `#[pymethods]` to expose to Python
-3. Register new classes in the `fluss_python` module in `lib.rs`
-4. Update Python type declaration file `py.typed`
-5. Add tests and examples
-
 ### Testing
 
 ```bash
