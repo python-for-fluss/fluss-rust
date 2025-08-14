@@ -2,92 +2,177 @@ import fluss_python as fluss
 import pyarrow as pa
 import pandas as pd
 import time
+import asyncio
 
-config = fluss.Config("127.0.0.1:9123")
-with fluss.FlussConnection(config) as conn:
-
-    # Sample data to insert
-    data = {
-        "id": [1, 2, 3],
-        "name": ["Alice", "Bob", "Charlie"],
-        "score": [95.2, 87.2, 92.1]
+async def main():
+    # Create connection configuration
+    config_spec = {
+        "bootstrap.servers": "127.0.0.1:9123",
+        # Add other configuration options as needed
+        "request.max.size": "10485760",  # 10 MB
+        "writer.acks": "all",  # Wait for all replicas to acknowledge
+        "writer.retries": "3",  # Retry up to 3 times on failure
+        "writer.batch.size": "1000",  # Batch size for writes
     }
+    config = fluss.Config(config_spec)
+    
+    # Create connection using the static connect method
+    conn = await fluss.FlussConnection.connect(config)
 
     # Define fields for PyArrow
     fields = [
         pa.field("id", pa.int32()),
         pa.field("name", pa.string()),
-        pa.field("score", pa.float32())
+        pa.field("score", pa.float32()),
+        pa.field("age", pa.int32())
     ]
 
     # Create a PyArrow schema
     schema = pa.schema(fields)
 
-	# Create a Fluss TableDescriptor
-    table_descriptor = fluss.TableDescriptor(schema)
+    # Create a Fluss Schema first (this is what TableDescriptor expects)
+    fluss_schema = fluss.Schema(schema)
+
+    # Create a Fluss TableDescriptor
+    table_descriptor = fluss.TableDescriptor(fluss_schema)
 
     # Get the admin for Fluss
-    admin = conn.get_admin()
+    admin = await conn.get_admin()
 
     # Create a Fluss table
-    table_path = fluss.TablePath("fluss", "my_table_1")
-    admin.create_table(table_path, table_descriptor, True)
+    table_path = fluss.TablePath("fluss", "sample_table")
+    
+    try:
+        await admin.create_table(table_path, table_descriptor, True)
+        print(f"Created table: {table_path}")
+    except Exception as e:
+        print(f"Table creation failed: {e}")
 
     # Get table information via admin
-    table_info = admin.get_table(table_path)
-    print(f"Table info: {table_info}")
-    print(f"Table ID: {table_info.table_id}")
-    print(f"Schema ID: {table_info.schema_id}")
-    print(f"Created time: {table_info.created_time}")
-    print(f"Primary keys: {table_info.get_primary_keys()}")
+    try:
+        table_info = await admin.get_table(table_path)
+        print(f"Table info: {table_info}")
+        print(f"Table ID: {table_info.table_id}")
+        print(f"Schema ID: {table_info.schema_id}")
+        print(f"Created time: {table_info.created_time}")
+        print(f"Primary keys: {table_info.get_primary_keys()}")
+    except Exception as e:
+        print(f"Failed to get table info: {e}")
 
     # Get the table instance
-    table = conn.get_table(table_path)
+    table = await conn.get_table(table_path)
+    print(f"Got table: {table}")
 
     # Create a writer for the table
-    table_write = table.new_append()
+    append_writer = await table.new_append_writer()
+    print(f"Created append writer: {append_writer}")
 
-    # Append the PyArrow Table to the Fluss table
-    pa_table = pa.Table.from_arrays(data, schema)
-    table_write.write_arrow(pa_table)
+    try:
+        # Test 1: Write PyArrow Table
+        print("\n--- Testing PyArrow Table write ---")
+        pa_table = pa.Table.from_arrays([
+            pa.array([1, 2, 3], type=pa.int32()),
+            pa.array(["Alice", "Bob", "Charlie"], type=pa.string()),
+            pa.array([95.2, 87.2, 92.1], type=pa.float32()),
+            pa.array([25, 30, 35], type=pa.int32())
+        ], schema=schema)
+        
+        append_writer.write_arrow(pa_table)
+        print("Successfully wrote PyArrow Table")
 
-    # Append a pandas DataFrame to the Fluss table
-    dataframe = pd.DataFrame(data)
-    table_write.write_pandas(dataframe)
+        # Test 2: Write PyArrow RecordBatch
+        print("\n--- Testing PyArrow RecordBatch write ---")
+        pa_record_batch = pa.RecordBatch.from_arrays([
+            pa.array([4, 5], type=pa.int32()),
+            pa.array(["David", "Eve"], type=pa.string()),
+            pa.array([88.5, 91.0], type=pa.float32()),
+            pa.array([28, 32], type=pa.int32())
+        ], schema=schema)
+        
+        append_writer.write_arrow_batch(pa_record_batch)
+        print("Successfully wrote PyArrow RecordBatch")
 
-    # Create a PyArrow RecordBatch
-    pa_record_batch = pa.RecordBatch.from_arrays(data, schema)
+        # Test 3: Write Pandas DataFrame
+        print("\n--- Testing Pandas DataFrame write ---")
+        df = pd.DataFrame({
+            "id": [6, 7],
+            "name": ["Frank", "Grace"],
+            "score": [89.3, 94.7],
+            "age": [29, 27]
+        })
+        
+        append_writer.write_pandas(df)
+        print("Successfully wrote Pandas DataFrame")
 
-    # Append the RecordBatch to the Fluss table
-    table_write.write_arrow_batch(pa_record_batch)
+        # Test 4: Write individual rows using dictionaries
+        print("\n--- Testing individual row writes ---")
+        rows = [
+            {"id": 8, "name": "Henry", "score": 92.8, "age": 31},
+            {"id": 9, "name": "Ivy", "score": 87.9, "age": 26},
+            {"id": 10, "name": "Jack", "score": 90.5, "age": 33}
+        ]
+        
+        for row in rows:
+            append_writer.append_row(row)
+        print("Successfully wrote individual rows")
 
-    table_write.close()
+        # Flush all pending data
+        print("\n--- Flushing data ---")
+        append_writer.flush()
+        print("Successfully flushed data")
 
-    # Now we can scan the table
-    # scan the whole table
-    log_scanner = table.new_log_scanner()
-    cur_timestamp = time.time_ns() // 1_000  # current timestamp in microseconds
-    # scan from the earliest timestamp to the current timestamp
-    result = log_scanner.scan_earliest(cur_timestamp)
+    except Exception as e:
+        print(f"Error during writing: {e}")
+    finally:
+        # Close the writer
+        append_writer.close()
+        print("Closed append writer")
 
-    # we can iterate over the result
-    for row in result:
-        print(row)
+    # Now scan the table to verify data was written
+    print("\n--- Scanning table ---")
+    try:
+        # TODO: support async log scanner
+        log_scanner = table.new_log_scanner_sync()
+        print(f"Created log scanner: {log_scanner}")
+        
+        # Subscribe to scan from earliest to current timestamp
+        # current timestamp in microseconds
+        cur_timestamp = time.time_ns() // 1_000 
+        # start_timestamp=None (earliest), end_timestamp=current
+        log_scanner.subscribe(None, cur_timestamp) 
+        
+        print("Scanning results using to_arrow():")
+        
+        # Try to get as PyArrow Table
+        try:
+            pa_table_result = log_scanner.to_arrow()
+            print(f"\nAs PyArrow Table: {pa_table_result}")
+        except Exception as e:
+            print(f"Could not convert to PyArrow: {e}")
+        
+        # Let's subscribe from the beginning again.
+        # Reset subscription
+        log_scanner.subscribe(None, cur_timestamp)
+        
+        # Try to get as Pandas DataFrame  
+        try:
+            df_result = log_scanner.to_pandas()
+            print(f"\nAs Pandas DataFrame:\n{df_result}")
+        except Exception as e:
+            print(f"Could not convert to Pandas: {e}")
 
-    # or return a pyarrow Table (all data in memory)
-    pa_table = result.to_arrow()
-    print(pa_table)
+        # TODO: support to_arrow_batch_reader()
+        # which is reserved for streaming use cases
 
-    # or get a pandas DataFrame
-    df = result.to_pandas()
-    print(df)
+        # TODO: support to_duckdb()
+                    
+    except Exception as e:
+        print(f"Error during scanning: {e}")
 
-    # or resgister it into an in-memory DuckDB table
-    duckdb_conn = result.to_duckdb("duck_table")
-    # Now we can query the DuckDB table
-    print(duckdb_conn.query("SELECT * FROM duck_table WHERE id = 1").fetchdf())
-    # Expected output:
-    #    id  name  score
-    # 0   1  Alice   95.2
+    # Close connection
+    conn.close()
+    print("\nConnection closed")
 
-# FlussConnection is automatically closed here
+if __name__ == "__main__":
+    # Run the async main function
+    asyncio.run(main())

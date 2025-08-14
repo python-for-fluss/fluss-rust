@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use crate::*;
 use pyo3::types::PyDict;
 
+/// Represents a table path with database and table name
 #[pyclass]
 #[derive(Clone)]
 pub struct TablePath {
@@ -11,7 +12,7 @@ pub struct TablePath {
 
 #[pymethods]
 impl TablePath {
-    // Create a new TablePath
+    /// Create a new TablePath
     #[new]
     pub fn new(database_name: String, table_name: String) -> Self {
         Self {
@@ -20,19 +21,19 @@ impl TablePath {
         }
     }
     
-    // Get the database name
+    /// Get the database name
     #[getter]
     pub fn database_name(&self) -> String {
         self.database_name.clone()
     }
     
-    // Get the table name  
+    /// Get the table name  
     #[getter]
     pub fn table_name(&self) -> String {
         self.table_name.clone()
     }
 
-    // Get table path as string
+    /// Get table path as string
     pub fn table_path_str(&self) -> String {
         format!("{}.{}", self.database_name, self.table_name)
     }
@@ -47,7 +48,7 @@ impl TablePath {
 }
 
 impl TablePath {
-    // Convert to core TablePath
+    /// Convert to core TablePath
     pub fn to_core(&self) -> fcore::metadata::TablePath {
         fcore::metadata::TablePath::new(self.database_name.clone(), self.table_name.clone())
     }
@@ -60,6 +61,7 @@ impl TablePath {
     }
 }
 
+/// Schema wrapper for Fluss table schema
 #[pyclass]
 pub struct Schema {
     __schema: fcore::metadata::Schema,
@@ -67,6 +69,7 @@ pub struct Schema {
 
 #[pymethods]
 impl Schema {
+    /// Create a new Schema from PyArrow schema with optional primary keys
     #[new]
     #[pyo3(signature = (schema, primary_keys=None, primary_key_name=None))]
     pub fn new(
@@ -105,16 +108,19 @@ impl Schema {
         })
     }
 
+    /// Get column names
     fn get_column_names(&self) -> Vec<String> {
         self.__schema.columns().iter().map(|col| col.name().to_string()).collect()
     }
 
+    /// Get column types
     fn get_column_types(&self) -> Vec<String> {
         self.__schema.columns().iter()
             .map(|col| Utils::datatype_to_string(col.data_type()))
             .collect()
     }
 
+    /// Get columns as (name, type) pairs
     fn get_columns(&self) -> Vec<(String, String)> {
         self.__schema.columns().iter()
             .map(|col| (col.name().to_string(), Utils::datatype_to_string(col.data_type())))
@@ -129,12 +135,13 @@ impl Schema {
 }
 
 impl Schema {
-    // Convert to core Schema
+    /// Convert to core Schema
     pub fn to_core(&self) -> &fcore::metadata::Schema {
         &self.__schema
     }
 }
 
+/// Table distribution configuration
 #[pyclass]
 pub struct TableDistribution {
     inner: fcore::metadata::TableDistribution,
@@ -142,16 +149,19 @@ pub struct TableDistribution {
 
 #[pymethods]
 impl TableDistribution {
+    /// Get bucket keys
     fn bucket_keys(&self) -> Vec<String> {
         self.inner.bucket_keys().to_vec()
     }
 
+    /// Get bucket count
     fn bucket_count(&self) -> Option<i32> {
         self.inner.bucket_count()
     }
 }
 
 
+/// Table descriptor containing schema and metadata
 #[pyclass]
 #[derive(Clone)]
 pub struct TableDescriptor {
@@ -160,7 +170,7 @@ pub struct TableDescriptor {
 
 #[pymethods]
 impl TableDescriptor {
-    // Create a new TableDescriptor
+    /// Create a new TableDescriptor
     #[new]
     #[pyo3(signature = (schema, **kwargs))]
     pub fn new(
@@ -234,6 +244,7 @@ impl TableDescriptor {
         })
     }
 
+    /// Get the schema of this table descriptor
     pub fn get_schema(&self) -> PyResult<Schema> {
         Ok(Schema {
             __schema: self.__tbl_desc.schema().clone(),
@@ -242,13 +253,13 @@ impl TableDescriptor {
 }
 
 impl TableDescriptor {
-    // Convert to core TableDescriptor
+    /// Convert to core TableDescriptor
     pub fn to_core(&self) -> &fcore::metadata::TableDescriptor {
         &self.__tbl_desc
     }
 }
 
-// Information about a Fluss table
+/// Information about a Fluss table
 #[pyclass]
 #[derive(Clone)]
 pub struct TableInfo {
@@ -257,105 +268,105 @@ pub struct TableInfo {
 
 #[pymethods]
 impl TableInfo {
-    // Get the table ID
+    /// Get the table ID
     #[getter]
     pub fn table_id(&self) -> i64 {
         self.__table_info.get_table_id()
     }
     
-    // Get the schema ID
+    /// Get the schema ID
     #[getter]
     pub fn schema_id(&self) -> i32 {
         self.__table_info.get_schema_id()
     }
     
-    // Get the table path
+    /// Get the table path
     #[getter]
     pub fn table_path(&self) -> TablePath {
         TablePath::from_core(self.__table_info.get_table_path().clone())
     }
 
-    // Get the created time
+    /// Get the created time
     #[getter]
     pub fn created_time(&self) -> i64 {
         self.__table_info.get_created_time()
     }
     
-    // Get the modified time
+    /// Get the modified time
     #[getter]
     pub fn modified_time(&self) -> i64 {
         self.__table_info.get_modified_time()
     }
     
-    // Get the primary keys
+    /// Get the primary keys
     pub fn get_primary_keys(&self) -> Vec<String> {
         self.__table_info.get_primary_keys().clone()
     }
 
-    // Get the bucket keys
+    /// Get the bucket keys
     pub fn get_bucket_keys(&self) -> Vec<String> {
         self.__table_info.get_bucket_keys().to_vec()
     }
 
-    // Get the partition keys
+    /// Get the partition keys
     pub fn get_partition_keys(&self) -> Vec<String> {
         self.__table_info.get_partition_keys().to_vec()
     }
 
-    // Get number of buckets
+    /// Get number of buckets
     #[getter]
     pub fn num_buckets(&self) -> i32 {
         self.__table_info.get_num_buckets()
     }
 
-    // Check if table has primary key
+    /// Check if table has primary key
     pub fn has_primary_key(&self) -> bool {
         self.__table_info.has_primary_key()
     }
 
-    // Check if table is partitioned
+    /// Check if table is partitioned
     pub fn is_partitioned(&self) -> bool {
         self.__table_info.is_partitioned()
     }
 
-    // Get properties
+    /// Get properties
     pub fn get_properties(&self) -> std::collections::HashMap<String, String> {
         self.__table_info.get_properties().clone()
     }
 
-    // Get custom properties
+    /// Get custom properties
     pub fn get_custom_properties(&self) -> std::collections::HashMap<String, String> {
         self.__table_info.get_custom_properties().clone()
     }
 
-    // Get comment
+    /// Get comment
     #[getter]
     pub fn comment(&self) -> Option<String> {
         self.__table_info.get_comment().map(|s| s.to_string())
     }
 
-    // get the Schema
+    /// Get the Schema
     pub fn get_schema(&self) -> Schema {
         Schema {
             __schema: self.__table_info.get_schema().clone(),
         }
     }
 
-    // Get column names
+    /// Get column names
     pub fn get_column_names(&self) -> Vec<String> {
         self.__table_info.get_schema().columns().iter()
             .map(|col| col.name().to_string())
             .collect()
     }
 
-    // Get column count
+    /// Get column count
     pub fn get_column_count(&self) -> usize {
         self.__table_info.get_schema().columns().len()
     }
 }
 
 impl TableInfo {
-    // Create from core TableInfo (internal use)
+    /// Create from core TableInfo (internal use)
     pub fn from_core(info: fcore::metadata::TableInfo) -> Self {
         Self {
             __table_info: info,

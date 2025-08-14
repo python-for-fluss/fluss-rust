@@ -4,7 +4,7 @@ use std::sync::Arc;
 use pyo3_async_runtimes::tokio::future_into_py;
 use crate::TOKIO_RUNTIME;
 
-// Represents a Fluss table for data operations
+/// Represents a Fluss table for data operations
 #[pyclass]
 pub struct FlussTable {
     connection: Arc<fcore::client::FlussConnection>,
@@ -16,7 +16,7 @@ pub struct FlussTable {
 
 #[pymethods]
 impl FlussTable {
-    // Create a new append writer for the table
+    /// Create a new append writer for the table
     fn new_append_writer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let conn = self.connection.clone();
         let metadata = self.metadata.clone();
@@ -42,8 +42,8 @@ impl FlussTable {
         })
     }
 
-    // Create a new log scanner for the table
-    // There's a problem here - LogScanner is unsendable
+    /// Create a new log scanner for the table
+    /// Note: LogScanner is not Send, so this may cause issues in async contexts
     fn new_log_scanner<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let conn = self.connection.clone();
         let metadata = self.metadata.clone();
@@ -96,17 +96,17 @@ impl FlussTable {
         Ok(py_scanner)
     }
 
-    // Get table information
+    /// Get table information
     pub fn get_table_info(&self) -> PyResult<TableInfo> {
         Ok(TableInfo::from_core(self.table_info.clone()))
     }
 
-    // Get table path
+    /// Get table path
     pub fn get_table_path(&self) -> PyResult<TablePath> {
         Ok(TablePath::from_core(self.table_path.clone()))
     }
 
-    // has primary key
+    /// Check if table has primary key
     pub fn has_primary_key(&self) -> bool {
         self.has_primary_key
     }
@@ -119,7 +119,7 @@ impl FlussTable {
 }
 
 impl FlussTable {
-    // Create a FlussTable
+    /// Create a FlussTable
     pub fn new_table(
         connection: Arc<fcore::client::FlussConnection>,
         metadata: Arc<fcore::client::Metadata>,
@@ -137,7 +137,7 @@ impl FlussTable {
     }
 }
 
-// Writer for appending data to a Fluss table
+/// Writer for appending data to a Fluss table
 #[pyclass]
 pub struct AppendWriter {
     inner: fcore::client::AppendWriter,
@@ -145,7 +145,7 @@ pub struct AppendWriter {
 
 #[pymethods]
 impl AppendWriter {
-        // Write Arrow table data
+    /// Write Arrow table data
     pub fn write_arrow(&mut self, py: Python, table: PyObject) -> PyResult<()> {
         // Convert Arrow Table to batches and write each batch
         let batches = table.call_method0(py, "to_batches")?;
@@ -157,7 +157,7 @@ impl AppendWriter {
         Ok(())
     }
 
-    // Write Arrow batch data
+    /// Write Arrow batch data
     pub fn write_arrow_batch(&mut self, py: Python, batch: PyObject) -> PyResult<()> {
         // Extract number of rows and columns from the Arrow batch
         let num_rows: usize = batch.getattr(py, "num_rows")?.extract(py)?;
@@ -187,7 +187,7 @@ impl AppendWriter {
         Ok(())
     }
 
-    // Write Pandas DataFrame data
+    /// Write Pandas DataFrame data
     pub fn write_pandas(&mut self, py: Python, df: PyObject) -> PyResult<()> {
         // Import pyarrow module
         let pyarrow = py.import("pyarrow")?;
@@ -202,7 +202,7 @@ impl AppendWriter {
         self.write_arrow(py, pa_table.into_py(py))
     }
 
-    // Append a single row from a Python dictionary
+    /// Append a single row from a Python dictionary
     pub fn append_row(&mut self, py: Python, row_dict: PyObject) -> PyResult<()> {
         let mut generic_row = fcore::row::GenericRow::new();
         
@@ -225,7 +225,7 @@ impl AppendWriter {
         })
     }
 
-    // Flush any pending data
+    /// Flush any pending data
     pub fn flush(&mut self) -> PyResult<()> {
         TOKIO_RUNTIME.block_on(async {
             self.inner.flush().await
@@ -233,7 +233,7 @@ impl AppendWriter {
         })
     }
 
-    // Close the writer and flush any pending data
+    /// Close the writer and flush any pending data
     pub fn close(&mut self) -> PyResult<()> {
         self.flush()?;
         println!("AppendWriter closed");
@@ -246,7 +246,7 @@ impl AppendWriter {
 }
 
 impl AppendWriter {
-    // Create a TableWriter from a core append writer
+    /// Create a TableWriter from a core append writer
     pub fn from_core(append: fcore::client::AppendWriter) -> Self {
         Self {
             inner: append,
@@ -312,7 +312,7 @@ impl AppendWriter {
     }
 }
 
-// Scanner for reading log data from a Fluss table
+/// Scanner for reading log data from a Fluss table
 #[pyclass(unsendable)]
 pub struct LogScanner {
     inner: fcore::client::LogScanner,
@@ -323,6 +323,7 @@ pub struct LogScanner {
 
 #[pymethods]
 impl LogScanner {
+    /// Subscribe to log data with timestamp range
     fn subscribe(
         &mut self,
         _start_timestamp: Option<i64>,
@@ -332,13 +333,8 @@ impl LogScanner {
         let end_timestamp = match _end_timestamp {
             Some(ts) => ts,
             None => {
-                // If no end_timestamp provided, use current system time + some buffer
-                // This prevents infinite polling when user doesn't specify an end time
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as i64;
-                now + 60000 // Add 1 minute buffer
+                return Err(FlussError::new_err(
+                    "end_timestamp must be specified for LogScanner".to_string()));
             }
         };
     
@@ -404,7 +400,6 @@ impl LogScanner {
                     for (_bucket, records) in &filtered_records_map {
                         filtered_total_records += records.len();
                     }
-                    println!("Filtered records count: {}", filtered_total_records);
                     
                     let filtered_records = fcore::record::ScanRecords::new(filtered_records_map);
                     
@@ -412,10 +407,6 @@ impl LogScanner {
                         // Convert ScanRecords to Arrow RecordBatch
                         let arrow_batch = Utils::convert_scan_records_to_arrow(filtered_records);
                         all_batches.extend(arrow_batch);
-                        // 输出一下看看
-                        for (i, batch) in all_batches.iter().enumerate() {
-                            println!("Batch {}: {} rows, {} columns", i, batch.num_rows(), batch.num_columns());
-                        }
                     }
                     
                     // If we reached the end timestamp, stop polling
@@ -445,7 +436,7 @@ impl LogScanner {
     }
 
     // Return an Arrow RecordBatchReader for streaming data
-    // TODO: Support this for streaming reads
+    /// TODO: Support this for streaming reads
     fn to_arrow_batch_reader(&mut self, py: Python) -> PyResult<()> {
         // Create a streaming iterator that wraps our LogScanner
         
@@ -470,7 +461,7 @@ impl LogScanner {
 }
 
 impl LogScanner {
-    // Create LogScanner from core LogScanner
+    /// Create LogScanner from core LogScanner
     pub fn from_core(
         inner: fcore::client::LogScanner,
         table_info: fcore::metadata::TableInfo,
@@ -483,7 +474,7 @@ impl LogScanner {
         }
     }
 
-    // Filter scan records by timestamp, returns (filtered_records, reached_end)
+    /// Filter scan records by timestamp, returns (filtered_records, reached_end)
     fn filter_records_by_timestamp(
         scan_records: fcore::record::ScanRecords, 
         end_timestamp: i64
@@ -508,7 +499,6 @@ impl LogScanner {
                 filtered_records.push(record);
             }
             
-            // Only add bucket if it has records
             if !filtered_records.is_empty() {
                 filtered_map.insert(table_bucket, filtered_records);
             }

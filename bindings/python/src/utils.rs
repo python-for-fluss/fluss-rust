@@ -8,7 +8,7 @@ use crate::*;
 pub struct Utils;
 
 impl Utils {
-    // Convert PyArrow schema to Rust Arrow schema
+    /// Convert PyArrow schema to Rust Arrow schema
     pub fn pyarrow_to_arrow_schema(py_schema: &PyObject) -> PyResult<SchemaRef> {
         Python::with_gil(|py| {
             let schema_bound = py_schema.bind(py);
@@ -19,7 +19,7 @@ impl Utils {
         })
     }
 
-    // Convert Arrow DataType to Fluss DataType
+    /// Convert Arrow DataType to Fluss DataType
     pub fn arrow_type_to_fluss_type(arrow_type: &arrow::datatypes::DataType) -> PyResult<fcore::metadata::DataType> {
         use arrow::datatypes::DataType as ArrowDataType;
         use fcore::metadata::DataTypes;
@@ -53,6 +53,7 @@ impl Utils {
         Ok(fluss_type)
     }
 
+    /// Convert Fluss DataType to string representation
     pub fn datatype_to_string(data_type: &fcore::metadata::DataType) -> String {
         match data_type {
             fcore::metadata::DataType::Boolean(_) => "boolean".to_string(),
@@ -102,19 +103,19 @@ impl Utils {
         }
     }
 
-    // Parse log format string to LogFormat enum
+    /// Parse log format string to LogFormat enum
     pub fn parse_log_format(format_str: &str) -> PyResult<fcore::metadata::LogFormat> {
         fcore::metadata::LogFormat::parse(format_str)
             .map_err(|e| FlussError::new_err(format!("Invalid log format '{}': {}", format_str, e)))
     }
 
-    // Parse kv format string to KvFormat enum
+    /// Parse kv format string to KvFormat enum
     pub fn parse_kv_format(format_str: &str) -> PyResult<fcore::metadata::KvFormat> {
         fcore::metadata::KvFormat::parse(format_str)
             .map_err(|e| FlussError::new_err(format!("Invalid kv format '{}': {}", format_str, e)))
     }
 
-    // Convert ScanRecords to Arrow RecordBatch
+    /// Convert ScanRecords to Arrow RecordBatch
     pub fn convert_scan_records_to_arrow(
         _scan_records: fcore::record::ScanRecords,
     ) -> Vec<Arc<arrow::record_batch::RecordBatch>> {
@@ -132,9 +133,8 @@ impl Utils {
         result
     }
     
-    // Combine multiple Arrow batches into a single Table
+    /// Combine multiple Arrow batches into a single Table
     pub fn combine_batches_to_table(py: Python, batches: Vec<Arc<arrow::record_batch::RecordBatch>>) -> PyResult<PyObject> {
-        println!("combine_batches_to_table: Combining {} batches", batches.len());
         if batches.is_empty() {
             return Err(FlussError::new_err("No batches to combine"));
         }

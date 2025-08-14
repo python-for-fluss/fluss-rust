@@ -3,7 +3,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use crate::*;
 use std::sync::Arc;
 
-// Administrative client for managing Fluss tables
+/// Administrative client for managing Fluss tables
 #[pyclass]
 pub struct FlussAdmin {
     __admin: Arc<fcore::client::FlussAdmin>,
@@ -11,7 +11,7 @@ pub struct FlussAdmin {
 
 #[pymethods]
 impl FlussAdmin {
-    // Create a table with the given schema
+    /// Create a table with the given schema
     #[pyo3(signature = (table_path, table_descriptor, ignore_if_exists=None))]
     pub fn create_table<'py>(
         &self,
@@ -35,7 +35,7 @@ impl FlussAdmin {
         })
     }
 
-    // Get table information
+    /// Get table information
     pub fn get_table<'py>(
         &self,
         py: Python<'py>,

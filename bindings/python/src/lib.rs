@@ -28,7 +28,7 @@ static TOKIO_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
 
 #[pymodule]
 fn fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Register types
+    // Register all classes
     m.add_class::<Config>()?;
     m.add_class::<FlussConnection>()?;
     m.add_class::<TablePath>()?;
@@ -41,8 +41,8 @@ fn fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LogScanner>()?;
     
     // Register exception types
-    // todo: implement a seperate module for exceptions
-    // something like this:
+    // TODO: implement a separate module for exceptions
+    // Example implementation:
     // let exception_module = PyModule::new(py, "exceptions")?;
     // exception_module.add("Error", py.get_type::<Error>())?;
     // m.add_submodule(&exception_module)?;

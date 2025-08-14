@@ -2,162 +2,209 @@
 
 Python bindings for Fluss using PyO3 and Maturin.
 
-## 系统要求
+## System Requirements
 
 - Python 3.8+
 - Rust 1.70+
 - Maturin (`pip install maturin`)
 
-## 开发环境设置
+## Development Environment Setup
 
-### 1. 安装 Maturin
+### 1. Install Maturin
 
 ```bash
 pip install maturin
 ```
 
-### 2. 构建开发版本
+### 2. Build Development Version
 
 ```bash
 cd bindings/python
 maturin develop
 ```
 
-### 3. 构建发布版本
+### 3. Build Release Version
 
 ```bash
 maturin build --release
 ```
 
-### 4. 运行示例
+### 4. Run Examples
 
 ```bash
 python example/example.py
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 bindings/python/
-├── Cargo.toml              # Rust 依赖配置
-├── pyproject.toml          # Python 项目配置
-├── README.md              # 本文件
-├── src/                   # Rust 源代码
-│   ├── lib.rs            # 主入口模块
-│   ├── config.rs         # 配置相关
-│   ├── connection.rs     # 连接管理
-│   ├── admin.rs          # 管理操作
-│   ├── table.rs          # 表操作
-│   ├── types.rs          # 数据类型
-│   └── error.rs          # 错误处理
-├── python/               # Python 包源码
+├── Cargo.toml              # Rust dependency configuration
+├── pyproject.toml          # Python project configuration
+├── README.md              # This file
+├── src/                   # Rust source code
+│   ├── lib.rs            # Main entry module
+│   ├── config.rs         # Configuration related
+│   ├── connection.rs     # Connection management
+│   ├── admin.rs          # Admin operations
+│   ├── table.rs          # Table operations
+│   ├── types.rs          # Data types
+│   └── error.rs          # Error handling
+├── python/               # Python package source
 │   └── fluss_python/
-│       ├── __init__.py   # Python 包入口
-│       └── py.typed      # 类型声明
-└── example/              # 示例代码
+│       ├── __init__.py   # Python package entry
+│       └── py.typed      # Type declarations
+└── example/              # Example code
     └── example.py
 ```
 
-## API 概述
+## API Overview
 
-### 基本用法
+### Basic Usage
 
 ```python
 import fluss_python as fluss
+import pyarrow as pa
+import pandas as pd
+import asyncio
 
-# 创建配置
-config = fluss.Config("127.0.0.1:9123", 30000)
+async def main():
+    # Create connection configuration
+    config_spec = {
+        "bootstrap.servers": "127.0.0.1:9123",
+        "request.max.size": "10485760",  # 10 MB
+        "writer.acks": "all",  # Wait for all replicas to acknowledge
+        "writer.retries": "3",  # Retry up to 3 times on failure
+        "writer.batch.size": "1000",  # Batch size for writes
+    }
+    config = fluss.Config(config_spec)
+    
+    # Create connection using the static connect method
+    conn = await fluss.FlussConnection.connect(config)
 
-# 建立连接
-with fluss.FlussConnection(config) as conn:
-    # 获取管理客户端
-    admin = conn.get_admin()
+    # Define PyArrow schema
+    fields = [
+        pa.field("id", pa.int32()),
+        pa.field("name", pa.string()),
+        pa.field("score", pa.float32()),
+        pa.field("age", pa.int32())
+    ]
+    schema = pa.schema(fields)
+
+    # Create Fluss Schema and TableDescriptor
+    fluss_schema = fluss.Schema(schema)
+    table_descriptor = fluss.TableDescriptor(fluss_schema)
+
+    # Get admin client
+    admin = await conn.get_admin()
+
+    # Create table path
+    table_path = fluss.TablePath("fluss", "sample_table")
+
+    # Create table
+    await admin.create_table(table_path, table_descriptor, True)
+
+    # Get table
+    table = await conn.get_table(table_path)
+
+    # Write data
+    append_writer = await table.new_append_writer()
     
-    # 创建表路径
-    table_path = fluss.TablePath("my_database", "my_table")
+    # Write PyArrow Table
+    pa_table = pa.Table.from_arrays([
+        pa.array([1, 2, 3], type=pa.int32()),
+        pa.array(["Alice", "Bob", "Charlie"], type=pa.string()),
+        pa.array([95.2, 87.2, 92.1], type=pa.float32()),
+        pa.array([25, 30, 35], type=pa.int32())
+    ], schema=schema)
+    await append_writer.write_arrow(pa_table)
     
-    # 创建表
-    admin.create_table(table_path, schema, ignore_if_exists=True)
+    # Write Pandas DataFrame
+    df = pd.DataFrame({
+        "id": [4, 5],
+        "name": ["David", "Eve"],
+        "score": [88.5, 91.0],
+        "age": [28, 32]
+    })
+    await append_writer.write_pandas(df)
     
-    # 获取表
-    table = conn.get_table(table_path)
+    # Close writer
+    await append_writer.close()
+
+    # Read data
+    import time
+    log_scanner = table.new_log_scanner_sync()
+    cur_timestamp = time.time_ns() // 1_000  # current timestamp in microseconds
+    await log_scanner.subscribe(None, cur_timestamp)  # Scan from earliest to current
+    pa_table_result = log_scanner.to_arrow()
     
-    # 写入数据
-    with table.new_append() as writer:
-        writer.write_pandas(df)
-    
-    # 读取数据
-    scanner = table.new_log_scanner()
-    result = scanner.scan_earliest(end_timestamp)
-    df = result.to_pandas()
+    # Close connection
+    conn.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-### 核心类
+### Core Classes
 
 #### `Config`
-配置 Fluss 连接参数
+
+Configuration for Fluss connection parameters
 
 #### `FlussConnection`
-连接到 Fluss 集群的主要接口
+
+Main interface for connecting to Fluss cluster
 
 #### `FlussAdmin`
-管理表的创建、删除等操作
+
+Administrative operations for managing tables (create, delete, etc.)
 
 #### `FlussTable`
-表示一个 Fluss 表，提供读写操作
+
+Represents a Fluss table, providing read and write operations
 
 #### `TableWriter`
-用于向表写入数据，支持 PyArrow 和 Pandas
+
+Used for writing data to tables, supports PyArrow and Pandas
 
 #### `LogScanner`
-用于扫描表的日志数据
+
+Used for scanning table log data
 
 #### `ScanResult`
-扫描结果，支持转换为 PyArrow、Pandas 或 DuckDB
 
-## 开发指南
+Scan results, supports conversion to PyArrow, Pandas or DuckDB
 
-### 添加新功能
+## Development Guide
 
-1. 在相应的 Rust 模块中实现功能
-2. 使用 `#[pyclass]` 和 `#[pymethods]` 暴露给 Python
-3. 在 `lib.rs` 的 `fluss_python` 模块中注册新类
-4. 更新 Python 类型声明文件 `py.typed`
-5. 添加测试和示例
+### Adding New Features
 
-### 测试
+1. Implement functionality in corresponding Rust modules
+2. Use `#[pyclass]` and `#[pymethods]` to expose to Python
+3. Register new classes in the `fluss_python` module in `lib.rs`
+4. Update Python type declaration file `py.typed`
+5. Add tests and examples
+
+### Testing
 
 ```bash
-# 构建并安装到开发环境
+# Build and install to development environment
 maturin develop
 
-# 运行测试
-python -m pytest tests/
-
-# 运行示例
+# Run examples
 python example/example.py
 ```
 
-### 发布
+### Release
 
 ```bash
-# 构建 wheel
+# Build wheel
 maturin build --release
 
-# 发布到 PyPI
+# Publish to PyPI
 maturin publish
 ```
 
-## 待实现功能
-
-- [ ] 实际的 Fluss 客户端集成
-- [ ] PyArrow 表的读写支持
-- [ ] 异步操作支持 
-- [ ] 错误处理完善
-- [ ] 完整的测试套件
-- [ ] 性能优化
-- [ ] 文档生成
-
-## 许可证
+## License
 
 Apache 2.0 License
