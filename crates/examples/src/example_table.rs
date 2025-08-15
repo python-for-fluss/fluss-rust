@@ -19,7 +19,7 @@ use clap::Parser;
 use fluss::client::FlussConnection;
 use fluss::config::Config;
 use fluss::error::Result;
-use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath};
+use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath, DatabaseDescriptor};
 use fluss::row::{GenericRow, InternalRow};
 use std::time::Duration;
 use tokio::try_join;
@@ -30,7 +30,7 @@ pub async fn main() -> Result<()> {
     config.bootstrap_server = Some("127.0.0.1:9123".to_string());
 
     let conn = FlussConnection::new(config).await?;
-
+    
     let table_descriptor = TableDescriptor::builder()
         .schema(
             Schema::builder()
@@ -44,9 +44,30 @@ pub async fn main() -> Result<()> {
 
     let admin = conn.get_admin().await?;
 
+    let database_descriptor = DatabaseDescriptor::builder()
+        .comment("Test database created from Rust client")
+        .custom_property("env", "test")
+        .custom_property("created_by", "rust_client")
+        .build()?;
+    
+    println!("Creating database 'testing'...");
+    admin.create_database("fluss", true, Some(&database_descriptor)).await?;
+    println!("Database 'testing' created successfully!");
+    
+    // drop the old table
+    admin.drop_table(&table_path, true).await?;
+    
     admin
         .create_table(&table_path, &table_descriptor, true)
         .await?;
+
+    // List tables in the database
+    println!("Listing tables in database 'fluss'...");
+    let tables = admin.list_tables("fluss").await?;
+    println!("Found {} tables:", tables.len());
+    for table_name in &tables {
+        println!("  - {}", table_name);
+    }
 
     // 2: get the table
     let table_info = admin.get_table(&table_path).await?;

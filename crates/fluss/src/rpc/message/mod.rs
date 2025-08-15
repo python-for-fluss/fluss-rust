@@ -21,13 +21,18 @@ use crate::rpc::frame::{ReadError, WriteError};
 use bytes::{Buf, BufMut};
 
 mod create_table;
+mod drop_table;
+mod list_tables;
 mod fetch;
 mod get_table;
 mod header;
 mod produce_log;
 mod update_metadata;
 
+pub use create_database::*;
 pub use create_table::*;
+pub use drop_table::*;
+pub use list_tables::*;
 pub use fetch::*;
 pub use get_table::*;
 pub use header::*;
