@@ -657,6 +657,27 @@ impl TablePath {
 }
 
 #[derive(Debug, Clone)]
+pub struct PhysicalTablePath {
+    table_path: TablePath,
+    partition: Option<String>,
+}
+
+impl PhysicalTablePath {
+    pub fn of(table_path: TablePath) -> Self {
+        Self {
+            table_path,
+            partition: None,
+        }
+    }
+
+    // TODO: support partition
+
+    pub fn get_table_path(&self) -> &TablePath {
+        &self.table_path
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct TableInfo {
     pub table_path: TablePath,
     pub table_id: i64,

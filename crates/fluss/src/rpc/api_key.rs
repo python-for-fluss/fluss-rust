@@ -31,6 +31,7 @@ pub enum ApiKey {
     MetaData,
     ProduceLog,
     FetchLog,
+    ListOffsets,
     GetDatabaseInfo,
     Unknown(i16),
 }
@@ -50,6 +51,7 @@ impl From<i16> for ApiKey {
             1012 => ApiKey::MetaData,
             1014 => ApiKey::ProduceLog,
             1015 => ApiKey::FetchLog,
+            1021 => ApiKey::ListOffsets,
             1035 => ApiKey::GetDatabaseInfo,
             _ => Unknown(key),
         }
@@ -71,6 +73,7 @@ impl From<ApiKey> for i16 {
             ApiKey::MetaData => 1012,
             ApiKey::ProduceLog => 1014,
             ApiKey::FetchLog => 1015,
+            ApiKey::ListOffsets => 1021,
             ApiKey::GetDatabaseInfo => 1035,
             Unknown(x) => x,
         }

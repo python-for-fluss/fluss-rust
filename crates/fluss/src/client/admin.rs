@@ -88,7 +88,7 @@ impl FlussAdmin {
         table_path: &TablePath,
         ignore_if_exists: bool,
     ) -> Result<()> {
-        let response = self
+        let _response = self
             .admin_gateway
             .request(DropTableRequest::new(
                 table_path,
