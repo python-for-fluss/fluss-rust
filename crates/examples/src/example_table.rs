@@ -50,13 +50,55 @@ pub async fn main() -> Result<()> {
         .custom_property("created_by", "rust_client")
         .build()?;
     
-    println!("Creating database 'testing'...");
-    admin.create_database("fluss", true, Some(&database_descriptor)).await?;
-    println!("Database 'testing' created successfully!");
+    // list all databases
+    println!("Listing all databases...");
+    let databases = admin.list_databases().await?;
+    println!("Found {} databases:", databases.len());
+    for db_name in &databases {
+        println!("  - {}", db_name);
+    }
     
-    // drop the old table
-    admin.drop_table(&table_path, true).await?;
+    // check if database exists
+    let test_db_name = "testing";
+    let db_exists = admin.database_exists(test_db_name).await?;
+    println!("Database '{}' exists: {}", test_db_name, db_exists);
     
+    // drop the testing database if it exists.
+    // Be Careful here.
+    if db_exists {
+        println!("Dropping existing database '{}'...", test_db_name);
+        admin.drop_database(test_db_name, true, false).await?;
+        println!("Database '{}' dropped successfully!", test_db_name);
+    }
+    
+    // create a new database
+    println!("Creating database '{}'...", test_db_name);
+    admin.create_database(test_db_name, true, Some(&database_descriptor)).await?;
+    println!("Database '{}' created successfully!", test_db_name);
+    
+    // get database info
+    println!("Getting database info for '{}'...", test_db_name);
+    let db_info = admin.get_database_info(test_db_name).await?;
+    println!("Database info:");
+    println!("  Name: {}", db_info.database_name());
+    println!("  Created time: {}", db_info.created_time());
+    println!("  Modified time: {}", db_info.modified_time());
+    println!("  Descriptor: {:?}", db_info.database_descriptor());
+    
+    // list databases after creation
+    println!("Listing databases after creation...");
+    let databases_after = admin.list_databases().await?;
+    println!("Now we have {} databases:", databases_after.len());
+    for db_name in &databases_after {
+        println!("  - {}", db_name);
+    }
+    
+    // drop the old table if exists. Would not happen since we just created it.
+    if admin.table_exists(&table_path).await? {
+        println!("Dropping existing table at path: {}", table_path);
+        admin.drop_table(&table_path, true).await?;
+    }
+
     admin
         .create_table(&table_path, &table_descriptor, true)
         .await?;

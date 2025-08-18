@@ -11,6 +11,46 @@ pub struct DatabaseDescriptor {
     custom_properties: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct DatabaseInfo {
+    database_name: String,
+    database_descriptor: DatabaseDescriptor,
+    created_time: i64,
+    modified_time: i64,
+}
+
+impl DatabaseInfo {
+    pub fn new(
+        database_name: String,
+        database_descriptor: DatabaseDescriptor,
+        created_time: i64,
+        modified_time: i64,
+    ) -> Self {
+        Self {
+            database_name,
+            database_descriptor,
+            created_time,
+            modified_time,
+        }
+    }
+
+    pub fn database_name(&self) -> &str {
+        &self.database_name
+    }
+
+    pub fn database_descriptor(&self) -> &DatabaseDescriptor {
+        &self.database_descriptor
+    }
+
+    pub fn created_time(&self) -> i64 {
+        self.created_time
+    }
+
+    pub fn modified_time(&self) -> i64 {
+        self.modified_time
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct DatabaseDescriptorBuilder {
     comment: Option<String>,
