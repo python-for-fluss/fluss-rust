@@ -4,7 +4,7 @@ Python bindings for Fluss using PyO3 and Maturin.
 
 ## System Requirements
 
-- Python 3.8+
+- Python 3.9+
 - Rust 1.70+
 - Maturin (`pip install maturin`)
 
