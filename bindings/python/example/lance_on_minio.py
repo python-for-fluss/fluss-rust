@@ -66,7 +66,7 @@ def process_images(schema: pa.Schema):
 
 	# Get the list of image files
 	image_files = [filename for filename in os.listdir(images_folder)
-		  		 if filename.endswith((".png", ".jpg", ".jpeg"))]
+		if filename.endswith((".png", ".jpg", ".jpeg"))]
 
 	# Iterate over all images in the folder with tqdm
 	for filename in tqdm(image_files, desc="Processing Images"):

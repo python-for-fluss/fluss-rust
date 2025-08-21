@@ -1,8 +1,11 @@
-import fluss_python as fluss
-import pyarrow as pa
-import pandas as pd
-import time
 import asyncio
+import time
+
+import pandas as pd
+import pyarrow as pa
+
+import fluss_python as fluss
+
 
 async def main():
     # Create connection configuration
