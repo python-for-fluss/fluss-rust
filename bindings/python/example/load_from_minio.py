@@ -2,8 +2,10 @@ import lance
 import pandas as pd
 import pathlib
 
+table_name = "lance_images_4"
+
 def loading_into_pandas():
-	uri = "s3://lance/fluss/images_minio.lance"
+	uri = "s3://lance/fluss/" + table_name + ".lance"
 	ds = lance.dataset(uri, storage_options={"access_key_id": "minio", "secret_access_key": "minioadmin", "endpoint": "http://localhost:9000", "allow_http": "true",})
 
 	# Accumulate data from batches into a list
