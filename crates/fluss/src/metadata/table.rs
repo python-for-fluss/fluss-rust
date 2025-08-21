@@ -323,6 +323,7 @@ impl TableDescriptorBuilder {
 
     pub fn properties(mut self, properties: HashMap<String, String>) -> Self {
         self.properties.extend(properties);
+        println!("Properties: {:?}", self.properties);
         self
     }
 

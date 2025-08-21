@@ -255,7 +255,7 @@ impl AppendWriter {
 
     // Convert Python value to Datum
     fn convert_python_value_to_datum(&self, py: Python, value: PyObject) -> PyResult<fcore::row::Datum<'static>> {
-        use fcore::row::{Datum, F32, F64};
+        use fcore::row::{Datum, F32, F64, Blob};
         
         // First try to extract scalar values from Arrow types
         let obj_ref = value.bind(py);
@@ -302,6 +302,11 @@ impl AppendWriter {
             // This is a simplified approach - in production, you might want better lifetime management
             let leaked_str: &'static str = Box::leak(str_val.into_boxed_str());
             return Ok(Datum::String(leaked_str));
+        }
+
+        if let Ok(bytes_val) = value.extract::<Vec<u8>>(py) {
+            let blob = Blob::from(bytes_val);
+            return Ok(Datum::Blob(blob));
         }
         
         // If we can't convert, return an error
