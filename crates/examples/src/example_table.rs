@@ -19,7 +19,7 @@ use clap::Parser;
 use fluss::client::FlussConnection;
 use fluss::config::Config;
 use fluss::error::Result;
-use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath, PhysicalTablePath, DatabaseDescriptor};
+use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath, PhysicalTablePath, DatabaseDescriptor, LakeSnapshot};
 // TODO: maybe move OffsetSpec to somewhere else
 use fluss::rpc::message::OffsetSpec;
 use fluss::row::{GenericRow, InternalRow};
@@ -102,6 +102,37 @@ pub async fn main() -> Result<()> {
     // get the table
     let table_info = admin.get_table(&table_path).await?;
     print!("Get created table:\n {table_info}\n");
+
+    // Test get_latest_lake_snapshot with fluss.lance_images table
+    println!("\nTesting get_latest_lake_snapshot...");
+    let lance_images_table_path = TablePath::new("fluss".to_owned(), "lance_images".to_owned());
+    
+    // Check if the lance_images table exists
+    match admin.table_exists(&lance_images_table_path).await {
+        Ok(exists) => {
+            if exists {
+                println!("Table 'fluss.lance_images' exists, getting lake snapshot...");
+                match admin.get_latest_lake_snapshot(&lance_images_table_path).await {
+                    Ok(lake_snapshot) => {
+                        println!("  Successfully got lake snapshot for 'fluss.lance_images':");
+                        println!("  Snapshot ID: {}", lake_snapshot.snapshot_id());
+                        println!("  Table buckets offset count: {}", lake_snapshot.table_buckets_offset().len());
+                        
+                        for (table_bucket, offset) in lake_snapshot.table_buckets_offset() {
+                            println!("    Bucket {} (table_id: {}): offset {}", 
+                                table_bucket.bucket_id(), 
+                                table_bucket.table_id(), 
+                                offset);
+                        }
+                    }
+                    Err(e) => println!("✗ Error getting lake snapshot for 'fluss.lance_images': {}", e),
+                }
+            } else {
+                println!("Table 'fluss.lance_images' does not exist, skipping lake snapshot test");
+            }
+        }
+        Err(e) => println!("✗ Error checking if 'fluss.lance_images' table exists: {}", e),
+    }
 
     // write row
     let mut row = GenericRow::new();

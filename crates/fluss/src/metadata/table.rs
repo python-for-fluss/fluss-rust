@@ -964,3 +964,26 @@ impl TableBucket {
         self.partition_id
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LakeSnapshot {
+    pub snapshot_id: i64,
+    pub table_buckets_offset: HashMap<TableBucket, i64>,
+}
+
+impl LakeSnapshot {
+    pub fn new(snapshot_id: i64, table_buckets_offset: HashMap<TableBucket, i64>) -> Self {
+        Self {
+            snapshot_id,
+            table_buckets_offset,
+        }
+    }
+
+    pub fn snapshot_id(&self) -> i64 {
+        self.snapshot_id
+    }
+
+    pub fn table_buckets_offset(&self) -> &HashMap<TableBucket, i64> {
+        &self.table_buckets_offset
+    }
+}
