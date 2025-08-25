@@ -14,13 +14,14 @@ Python bindings for Fluss using PyO3 and Maturin.
 ### 1. Install Dependencies-dev
 
 ```bash
+cd bindings/python
 uv sync --extra dev
 ```
 
 ### 2. Build Development Version
 
 ```bash
-cd bindings/python
+source .venv/bin/activate
 uv run maturin develop
 ```
 

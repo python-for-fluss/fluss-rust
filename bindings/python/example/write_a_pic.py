@@ -1,5 +1,6 @@
-import fluss_python as fluss
 import pyarrow as pa
+
+import fluss_python as fluss
 
 
 async def main():
@@ -13,12 +14,14 @@ async def main():
     filename = "colored_logo"
     category = "logo"
     data_type = "image/png"
-    pa_schema = pa.schema([
-        pa.field("image", pa.binary()),
-        pa.field("filename", pa.string()),
-        pa.field("category", pa.string()),
-        pa.field("data_type", pa.string())
-    ])
+    pa_schema = pa.schema(
+        [
+            pa.field("image", pa.binary()),
+            pa.field("filename", pa.string()),
+            pa.field("category", pa.string()),
+            pa.field("data_type", pa.string()),
+        ]
+    )
     # Create a Fluss Schema
     fluss_schema = fluss.Schema(pa_schema)
     # Create a Fluss TableDescriptor
@@ -26,7 +29,7 @@ async def main():
         fluss_schema,
         properties={
             "table.datalake.enabled": "true",
-        }
+        },
     )
     # Get the admin for Fluss
     admin = await conn.get_admin()
@@ -46,7 +49,7 @@ async def main():
         print(f"Created time: {table_info.created_time}")
         print(f"Primary keys: {table_info.get_primary_keys()}")
     except Exception as e:
-        print(f"Failed to get table info: {e}") 
+        print(f"Failed to get table info: {e}")
     # Write the image data to the Fluss table
     table = await conn.get_table(table_path)
     print(f"Got table: {table}")
@@ -55,7 +58,9 @@ async def main():
     print(f"Created append writer: {append_writer}")
     try:
         print("\n--- Writing image data ---")
-        for record_batch in read_image_as_record_batch(image_path, filename, category, data_type):
+        for record_batch in read_image_as_record_batch(
+            image_path, filename, category, data_type
+        ):
             append_writer.write_arrow_batch(record_batch)
             print("Successfully wrote image data RecordBatch")
     except Exception as e:
@@ -65,9 +70,10 @@ async def main():
     conn.close()
     print("Closed connection")
 
+
 def read_image_as_record_batch(image_path, filename, category, data_type):
     # Read and convert the image to a binary format
-    with open(image_path, 'rb') as f:
+    with open(image_path, "rb") as f:
         binary_data = f.read()
 
         image_array = pa.array([binary_data], type=pa.binary())
@@ -78,14 +84,18 @@ def read_image_as_record_batch(image_path, filename, category, data_type):
         # Yield RecordBatch for each image
         yield pa.RecordBatch.from_arrays(
             [image_array, filename_array, category_array, data_type_array],
-            schema=pa.schema([
-                pa.field("image", pa.binary()),
-                pa.field("filename", pa.string()),
-                pa.field("category", pa.string()),
-                pa.field("data_type", pa.string())
-            ])
+            schema=pa.schema(
+                [
+                    pa.field("image", pa.binary()),
+                    pa.field("filename", pa.string()),
+                    pa.field("category", pa.string()),
+                    pa.field("data_type", pa.string()),
+                ]
+            ),
         )
+
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

@@ -18,7 +18,7 @@ async def main():
         "writer.batch.size": "1000",  # Batch size for writes
     }
     config = fluss.Config(config_spec)
-    
+
     # Create connection using the static connect method
     conn = await fluss.FlussConnection.connect(config)
 
@@ -27,7 +27,7 @@ async def main():
         pa.field("id", pa.int32()),
         pa.field("name", pa.string()),
         pa.field("score", pa.float32()),
-        pa.field("age", pa.int32())
+        pa.field("age", pa.int32()),
     ]
 
     # Create a PyArrow schema
@@ -44,7 +44,7 @@ async def main():
 
     # Create a Fluss table
     table_path = fluss.TablePath("fluss", "sample_table")
-    
+
     try:
         await admin.create_table(table_path, table_descriptor, True)
         print(f"Created table: {table_path}")
@@ -73,37 +73,45 @@ async def main():
     try:
         # Test 1: Write PyArrow Table
         print("\n--- Testing PyArrow Table write ---")
-        pa_table = pa.Table.from_arrays([
-            pa.array([1, 2, 3], type=pa.int32()),
-            pa.array(["Alice", "Bob", "Charlie"], type=pa.string()),
-            pa.array([95.2, 87.2, 92.1], type=pa.float32()),
-            pa.array([25, 30, 35], type=pa.int32())
-        ], schema=schema)
-        
+        pa_table = pa.Table.from_arrays(
+            [
+                pa.array([1, 2, 3], type=pa.int32()),
+                pa.array(["Alice", "Bob", "Charlie"], type=pa.string()),
+                pa.array([95.2, 87.2, 92.1], type=pa.float32()),
+                pa.array([25, 30, 35], type=pa.int32()),
+            ],
+            schema=schema,
+        )
+
         append_writer.write_arrow(pa_table)
         print("Successfully wrote PyArrow Table")
 
         # Test 2: Write PyArrow RecordBatch
         print("\n--- Testing PyArrow RecordBatch write ---")
-        pa_record_batch = pa.RecordBatch.from_arrays([
-            pa.array([4, 5], type=pa.int32()),
-            pa.array(["David", "Eve"], type=pa.string()),
-            pa.array([88.5, 91.0], type=pa.float32()),
-            pa.array([28, 32], type=pa.int32())
-        ], schema=schema)
-        
+        pa_record_batch = pa.RecordBatch.from_arrays(
+            [
+                pa.array([4, 5], type=pa.int32()),
+                pa.array(["David", "Eve"], type=pa.string()),
+                pa.array([88.5, 91.0], type=pa.float32()),
+                pa.array([28, 32], type=pa.int32()),
+            ],
+            schema=schema,
+        )
+
         append_writer.write_arrow_batch(pa_record_batch)
         print("Successfully wrote PyArrow RecordBatch")
 
         # Test 3: Write Pandas DataFrame
         print("\n--- Testing Pandas DataFrame write ---")
-        df = pd.DataFrame({
-            "id": [6, 7],
-            "name": ["Frank", "Grace"],
-            "score": [89.3, 94.7],
-            "age": [29, 27]
-        })
-        
+        df = pd.DataFrame(
+            {
+                "id": [6, 7],
+                "name": ["Frank", "Grace"],
+                "score": [89.3, 94.7],
+                "age": [29, 27],
+            }
+        )
+
         append_writer.write_pandas(df)
         print("Successfully wrote Pandas DataFrame")
 
@@ -112,9 +120,9 @@ async def main():
         rows = [
             {"id": 8, "name": "Henry", "score": 92.8, "age": 31},
             {"id": 9, "name": "Ivy", "score": 87.9, "age": 26},
-            {"id": 10, "name": "Jack", "score": 90.5, "age": 33}
+            {"id": 10, "name": "Jack", "score": 90.5, "age": 33},
         ]
-        
+
         for row in rows:
             append_writer.append_row(row)
         print("Successfully wrote individual rows")
@@ -137,27 +145,27 @@ async def main():
         # TODO: support async log scanner
         log_scanner = table.new_log_scanner_sync()
         print(f"Created log scanner: {log_scanner}")
-        
+
         # Subscribe to scan from earliest to current timestamp
         # current timestamp in microseconds
-        cur_timestamp = time.time_ns() // 1_000 
+        cur_timestamp = time.time_ns() // 1_000
         # start_timestamp=None (earliest), end_timestamp=current
-        log_scanner.subscribe(None, cur_timestamp) 
-        
+        log_scanner.subscribe(None, cur_timestamp)
+
         print("Scanning results using to_arrow():")
-        
+
         # Try to get as PyArrow Table
         try:
             pa_table_result = log_scanner.to_arrow()
             print(f"\nAs PyArrow Table: {pa_table_result}")
         except Exception as e:
             print(f"Could not convert to PyArrow: {e}")
-        
+
         # Let's subscribe from the beginning again.
         # Reset subscription
         log_scanner.subscribe(None, cur_timestamp)
-        
-        # Try to get as Pandas DataFrame  
+
+        # Try to get as Pandas DataFrame
         try:
             df_result = log_scanner.to_pandas()
             print(f"\nAs Pandas DataFrame:\n{df_result}")
@@ -168,13 +176,14 @@ async def main():
         # which is reserved for streaming use cases
 
         # TODO: support to_duckdb()
-                    
+
     except Exception as e:
         print(f"Error during scanning: {e}")
 
     # Close connection
     conn.close()
     print("\nConnection closed")
+
 
 if __name__ == "__main__":
     # Run the async main function
