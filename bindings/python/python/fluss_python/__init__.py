@@ -1,3 +1,3 @@
-from .fluss_python import *
+from fluss_python import *
 
-__all__ = fluss_python.__all__
+__version__ = "0.1.0"
