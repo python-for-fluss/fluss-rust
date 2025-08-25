@@ -9,6 +9,10 @@ Python bindings for Fluss using PyO3 and Maturin.
 - uv package manager
 - MacOS
 
+> **⚠️ Before you start:**  
+> Please make sure you can successfully build and run the [Fluss Rust client](../../crates/fluss/README.md) on your machine.  
+> The Python bindings require a working Fluss Rust backend and compatible environment.
+
 ## Development Environment Setup
 
 ### 1. Install Dependencies-dev
@@ -50,8 +54,14 @@ uv run mypy python/
 uv run python example/example.py
 ```
 
-## Project Structure
+### 7. Build API docs:
 
+```bash
+uv run pdoc fluss_python
+```
+
+## Project Structure
+```
 bindings/python/
 ├── Cargo.toml              # Rust dependency configuration
 ├── pyproject.toml          # Python project configuration
@@ -67,9 +77,11 @@ bindings/python/
 ├── python/               # Python package source
 │   └── fluss_python/
 │       ├── __init__.py   # Python package entry
+        ├── __init__.pyi  # Stub file
 │       └── py.typed      # Type declarations
 └── example/              # Example code
     └── example.py
+```
 
 ## API Overview
 

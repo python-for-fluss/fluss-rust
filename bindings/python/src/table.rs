@@ -43,7 +43,7 @@ impl FlussTable {
     }
 
     /// Create a new log scanner for the table
-    /// Note: LogScanner is not Send, so this may cause issues in async contexts
+    // Note: LogScanner is not Send, so this may cause issues in async contexts
     fn new_log_scanner<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let conn = self.connection.clone();
         let metadata = self.metadata.clone();
@@ -71,7 +71,7 @@ impl FlussTable {
         })
     }
 
-    // current workaround - synchronous version of new_log_scanner
+    /// current workaround - synchronous version of new_log_scanner
     fn new_log_scanner_sync(&self) -> PyResult<LogScanner> {
         let conn = self.connection.clone();
         let metadata = self.metadata.clone();
@@ -367,7 +367,7 @@ impl LogScanner {
         Ok(())
     }
 
-    // Convert all data to Arrow Table
+    /// Convert all data to Arrow Table
     fn to_arrow(&mut self, py: Python) -> PyResult<PyObject> {
         let mut all_batches = Vec::new();
         let end_timestamp = self.end_timestamp;
@@ -431,7 +431,7 @@ impl LogScanner {
         Utils::combine_batches_to_table(py, all_batches)
     }
 
-    // Convert all data to Pandas DataFrame
+    /// Convert all data to Pandas DataFrame
     fn to_pandas(&mut self, py: Python) -> PyResult<PyObject> {
         let arrow_table = self.to_arrow(py)?;
         
@@ -440,8 +440,8 @@ impl LogScanner {
         Ok(df)
     }
 
-    // Return an Arrow RecordBatchReader for streaming data
-    /// TODO: Support this for streaming reads
+    /// Return an Arrow RecordBatchReader for streaming data
+    // TODO: Support this for streaming reads
     fn to_arrow_batch_reader(&mut self, py: Python) -> PyResult<()> {
         // Create a streaming iterator that wraps our LogScanner
         
