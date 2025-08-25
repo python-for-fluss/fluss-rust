@@ -383,6 +383,107 @@ pub struct LakeSnapshot {
     table_buckets_offset: HashMap<fcore::metadata::TableBucket, i64>,
 }
 
+/// Represents a table bucket with table ID, partition ID, and bucket ID
+#[pyclass]
+#[derive(Clone)]
+pub struct TableBucket {
+    table_id: i64,
+    partition_id: Option<i64>,
+    bucket: i32,
+}
+
+#[pymethods]
+impl TableBucket {
+    /// Create a new TableBucket
+    #[new]
+    pub fn new(table_id: i64, bucket: i32) -> Self {
+        Self {
+            table_id,
+            partition_id: None,
+            bucket,
+        }
+    }
+
+    /// Create a new TableBucket with partition
+    #[staticmethod]
+    pub fn with_partition(table_id: i64, partition_id: i64, bucket: i32) -> Self {
+        Self {
+            table_id,
+            partition_id: Some(partition_id),
+            bucket,
+        }
+    }
+
+    /// Get table ID
+    #[getter]
+    pub fn table_id(&self) -> i64 {
+        self.table_id
+    }
+
+    /// Get bucket ID
+    #[getter]
+    pub fn bucket_id(&self) -> i32 {
+        self.bucket
+    }
+
+    /// Get partition ID
+    #[getter]
+    pub fn partition_id(&self) -> Option<i64> {
+        self.partition_id
+    }
+
+    /// String representation
+    pub fn __str__(&self) -> String {
+        if let Some(partition_id) = self.partition_id {
+            format!("TableBucket(table_id={}, partition_id={}, bucket={})", 
+                    self.table_id, partition_id, self.bucket)
+        } else {
+            format!("TableBucket(table_id={}, bucket={})", 
+                    self.table_id, self.bucket)
+        }
+    }
+
+    /// String representation
+    pub fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    /// Hash implementation for Python
+    pub fn __hash__(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        self.table_id.hash(&mut hasher);
+        self.partition_id.hash(&mut hasher);
+        self.bucket.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Equality implementation for Python
+    pub fn __eq__(&self, other: &TableBucket) -> bool {
+        self.table_id == other.table_id 
+            && self.partition_id == other.partition_id 
+            && self.bucket == other.bucket
+    }
+}
+
+impl TableBucket {
+    /// Create from core TableBucket (internal use)
+    pub fn from_core(bucket: fcore::metadata::TableBucket) -> Self {
+        Self {
+            table_id: bucket.table_id(),
+            partition_id: bucket.partition_id(),
+            bucket: bucket.bucket_id(),
+        }
+    }
+
+    /// Convert to core TableBucket (internal use)
+    pub fn to_core(&self) -> fcore::metadata::TableBucket {
+        fcore::metadata::TableBucket::new(self.table_id, self.bucket)
+    }
+}
+
 #[pymethods]
 impl LakeSnapshot {
     /// Create a new LakeSnapshot
@@ -400,16 +501,31 @@ impl LakeSnapshot {
         self.snapshot_id
     }
 
-    /// Get table bucket offsets as a Python dictionary
+    /// Get table bucket offsets as a Python dictionary with TableBucket keys
     #[getter]
     pub fn table_buckets_offset(&self, py: Python) -> PyResult<PyObject> {
         let dict = PyDict::new(py);
         for (bucket, offset) in &self.table_buckets_offset {
-            // Convert TableBucket to a string representation
-            let bucket_str = format!("{}_{}", bucket.table_id(), bucket.bucket_id());
-            dict.set_item(bucket_str, *offset)?;
+            let py_bucket = TableBucket::from_core(bucket.clone());
+            dict.set_item(Py::new(py, py_bucket)?, *offset)?;
         }
         Ok(dict.into())
+    }
+
+    /// Get offset for a specific table bucket
+    pub fn get_bucket_offset(&self, bucket: &TableBucket) -> Option<i64> {
+        let core_bucket = bucket.to_core();
+        self.table_buckets_offset.get(&core_bucket).copied()
+    }
+
+    /// Get all table buckets
+    pub fn get_table_buckets(&self, py: Python) -> PyResult<Vec<PyObject>> {
+        let mut buckets = Vec::new();
+        for bucket in self.table_buckets_offset.keys() {
+            let py_bucket = TableBucket::from_core(bucket.clone());
+            buckets.push(Py::new(py, py_bucket)?.into());
+        }
+        Ok(buckets)
     }
 
     /// String representation
