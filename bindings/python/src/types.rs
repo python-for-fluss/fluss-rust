@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use crate::*;
 use pyo3::types::PyDict;
+use std::collections::HashMap;
 
 /// Represents a table path with database and table name
 #[pyclass]
@@ -373,3 +374,63 @@ impl TableInfo {
         }
     }
 }
+
+/// Represents a lake snapshot with snapshot ID and table bucket offsets
+#[pyclass]
+#[derive(Clone)]
+pub struct LakeSnapshot {
+    snapshot_id: i64,
+    table_buckets_offset: HashMap<fcore::metadata::TableBucket, i64>,
+}
+
+#[pymethods]
+impl LakeSnapshot {
+    /// Create a new LakeSnapshot
+    #[new]
+    pub fn new(snapshot_id: i64) -> Self {
+        Self {
+            snapshot_id,
+            table_buckets_offset: HashMap::new(),
+        }
+    }
+
+    /// Get snapshot ID
+    #[getter]
+    pub fn snapshot_id(&self) -> i64 {
+        self.snapshot_id
+    }
+
+    /// Get table bucket offsets as a Python dictionary
+    #[getter]
+    pub fn table_buckets_offset(&self, py: Python) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+        for (bucket, offset) in &self.table_buckets_offset {
+            // Convert TableBucket to a string representation
+            let bucket_str = format!("{}_{}", bucket.table_id(), bucket.bucket_id());
+            dict.set_item(bucket_str, *offset)?;
+        }
+        Ok(dict.into())
+    }
+
+    /// String representation
+    pub fn __str__(&self) -> String {
+        format!("LakeSnapshot(snapshot_id={}, buckets_count={})", 
+                self.snapshot_id, self.table_buckets_offset.len())
+    }
+
+    /// String representation
+    pub fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+impl LakeSnapshot {
+    /// Create from core LakeSnapshot (internal use)
+    pub fn from_core(snapshot: fcore::metadata::LakeSnapshot) -> Self {
+        Self {
+            snapshot_id: snapshot.snapshot_id,
+            table_buckets_offset: snapshot.table_buckets_offset,
+        }
+    }
+}
+

@@ -55,6 +55,26 @@ impl FlussAdmin {
         })
     }
 
+    /// Get the latest lake snapshot for a table
+    pub fn get_latest_lake_snapshot<'py>(
+        &self,
+        py: Python<'py>,
+        table_path: &TablePath,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let core_table_path = table_path.to_core().clone();
+        let admin = self.__admin.clone();
+        
+        future_into_py(py, async move {
+            let core_lake_snapshot = admin.get_latest_lake_snapshot(&core_table_path).await
+                .map_err(|e| FlussError::new_err(format!("Failed to get lake snapshot: {}", e)))?;
+
+            Python::with_gil(|py| {
+                let lake_snapshot = LakeSnapshot::from_core(core_lake_snapshot);
+                Py::new(py, lake_snapshot)
+            })
+        })
+    }
+
     fn __repr__(&self) -> String {
         "FlussAdmin()".to_string()
     }
