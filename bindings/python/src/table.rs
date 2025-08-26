@@ -401,10 +401,6 @@ impl LogScanner {
                     };
                     
                     let filtered_records_map = filtered_records.into_records();
-                    let mut filtered_total_records = 0;
-                    for (_bucket, records) in &filtered_records_map {
-                        filtered_total_records += records.len();
-                    }
                     
                     let filtered_records = fcore::record::ScanRecords::new(filtered_records_map);
                     
@@ -443,20 +439,6 @@ impl LogScanner {
     /// Return an Arrow RecordBatchReader for streaming data
     // TODO: Support this for streaming reads
     fn to_arrow_batch_reader(&mut self, py: Python) -> PyResult<()> {
-        // Create a streaming iterator that wraps our LogScanner
-        
-        // let iterator = LogScannerIterator::new(self, py)?;
-        
-        // // Create Arrow schema for the reader
-        // let schema = Utils::create_arrow_schema(py, &self.table_schema)?;
-        
-        // // Create a Python RecordBatchReader that uses our iterator
-        // let pyarrow = py.import("pyarrow")?;
-        // let reader = pyarrow
-        //     .getattr("RecordBatchReader")?
-        //     .call_method1("from_batches", (schema, iterator))?;
-        
-        // Ok(reader.into())
         Ok(())
     }
 
@@ -510,44 +492,5 @@ impl LogScanner {
         }
         
         (fcore::record::ScanRecords::new(filtered_map), reached_end)
-    }
-}
-
-// Iterator for streaming Arrow RecordBatches from LogScanner
-#[pyclass]
-pub struct LogScannerIterator {
-    scanner_ptr: *mut LogScanner,
-    finished: bool,
-    batch_cache: Vec<PyObject>, // Cache for Arrow batches
-}
-
-#[pymethods]
-impl LogScannerIterator {
-    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
-        slf
-    }
-    
-    // TODO: Implement this for streaming reads
-    fn __next__(&mut self, py: Python) -> PyResult<()> {
-        Err(FlussError::new_err("Not implemented"))
-    }
-}
-
-// Make it unsendable to avoid thread safety issues
-unsafe impl Send for LogScannerIterator {}
-unsafe impl Sync for LogScannerIterator {}
-
-impl LogScannerIterator {
-    fn new(scanner: &mut LogScanner, _py: Python) -> PyResult<Self> {
-        Ok(Self {
-            scanner_ptr: scanner as *mut LogScanner,
-            finished: false,
-            batch_cache: Vec::new(),
-        })
-    }
-
-    // TODO: Support this for streaming reads
-    fn convert_to_batches() -> PyResult<()> {
-        Err(FlussError::new_err("Not implemented"))
     }
 }
