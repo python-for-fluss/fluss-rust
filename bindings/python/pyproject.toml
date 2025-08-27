@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/fluss-rust/fluss-rust"
+Repository = "https://github.com/apache/fluss-rust"
 
 [project.optional-dependencies]
 dev = [
