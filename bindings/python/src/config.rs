@@ -3,7 +3,7 @@ use pyo3::types::PyDict;
 use crate::*;
 
 /// Configuration for Fluss client
-#[pyclass]
+#[pyclass(module = "fluss_python")]
 #[derive(Clone)]
 pub struct Config {
     inner: fcore::config::Config,

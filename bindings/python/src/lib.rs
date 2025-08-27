@@ -26,7 +26,7 @@ static TOKIO_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
         .expect("Failed to create Tokio runtime")
 });
 
-#[pymodule]
+#[pymodule(name="fluss_python")]
 fn fluss_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register all classes
     m.add_class::<Config>()?;
