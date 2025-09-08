@@ -12,17 +12,14 @@ import fluss_python as fluss
 table_name = "example"
 
 
-def create_connection(config_spec):
+async def create_connection(config_spec):
     # Create connection using the static connect method
-    async def _inner():
-        config = fluss.Config(config_spec)
-        conn = await fluss.FlussConnection.connect(config)
-        return conn
-
-    return asyncio.run(_inner())
+    config = fluss.Config(config_spec)
+    conn = await fluss.FlussConnection.connect(config)
+    return conn
 
 
-def create_table(conn, table_path, pa_schema):
+async def create_table(conn, table_path, pa_schema):
     # Create a Fluss TableDescriptor
     fluss_schema = fluss.Schema(pa_schema)
     # Create a Fluss TableDescriptor
@@ -34,35 +31,29 @@ def create_table(conn, table_path, pa_schema):
         },
     )
 
-    async def _inner():
-        # Get the admin for Fluss
-        admin = await conn.get_admin()
+    # Get the admin for Fluss
+    admin = await conn.get_admin()
 
-        # Create a Fluss table
-        try:
-            await admin.create_table(table_path, table_descriptor, True)
-            print(f"Created table: {table_path}")
-        except Exception as e:
-            print(f"Table creation failed: {e}")
-
-    asyncio.run(_inner())
+    # Create a Fluss table
+    try:
+        await admin.create_table(table_path, table_descriptor, True)
+        print(f"Created table: {table_path}")
+    except Exception as e:
+        print(f"Table creation failed: {e}")
 
 
-def write_to_fluss(conn, table_path, pa_schema):
+async def write_to_fluss(conn, table_path, pa_schema):
     # Get table and create writer‘
-    async def _inner():
-        table = await conn.get_table(table_path)
-        append_writer = await table.new_append_writer()
-        try:
-            print("\n--- Writing image data ---")
-            for record_batch in process_images(pa_schema):
-                append_writer.write_arrow_batch(record_batch)
-        except Exception as e:
-            print(f"Failed to write image data: {e}")
-        finally:
-            append_writer.close()
-
-    asyncio.run(_inner())
+    table = await conn.get_table(table_path)
+    append_writer = await table.new_append_writer()
+    try:
+        print("\n--- Writing image data ---")
+        for record_batch in process_images(pa_schema):
+            append_writer.write_arrow_batch(record_batch)
+    except Exception as e:
+        print(f"Failed to write image data: {e}")
+    finally:
+        append_writer.close()
 
 
 def process_images(schema: pa.Schema):
@@ -117,16 +108,20 @@ def loading_into_pandas():
     return df
 
 
-if __name__ == "__main__":
+async def main():
     config_spec = {
         "bootstrap.servers": "127.0.0.1:9123",
     }
-    conn = create_connection(config_spec)
+    conn = await create_connection(config_spec)
     table_path = fluss.TablePath("fluss", table_name)
     pa_schema = pa.schema([("image", pa.binary())])
-    create_table(conn, table_path, pa_schema)
-    write_to_fluss(conn, table_path, pa_schema)
+    await create_table(conn, table_path, pa_schema)
+    await write_to_fluss(conn, table_path, pa_schema)
+    # sleep a little while to wait for Fluss tiering
     sleep(60)
     df = loading_into_pandas()
     print(df.head())
     conn.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
