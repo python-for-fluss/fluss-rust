@@ -1,5 +1,5 @@
 name: Build and upload wheels
-on: workflow_dispatch:
+on: workflow_dispatch
 jobs:
   build_wheels:
     runs-on: ${{ matrix.os }}
