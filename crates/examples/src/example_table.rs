@@ -19,7 +19,9 @@ use clap::Parser;
 use fluss::client::FlussConnection;
 use fluss::config::Config;
 use fluss::error::Result;
-use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath};
+use fluss::metadata::{DataTypes, Schema, TableDescriptor, TablePath, PhysicalTablePath, DatabaseDescriptor, LakeSnapshot};
+// TODO: maybe move OffsetSpec to somewhere else
+use fluss::rpc::message::OffsetSpec;
 use fluss::row::{GenericRow, InternalRow};
 use std::time::Duration;
 use tokio::try_join;
@@ -27,10 +29,10 @@ use tokio::try_join;
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut config = Config::parse();
-    config.bootstrap_server = Some("127.0.0.1:56405".to_string());
+    config.bootstrap_server = Some("127.0.0.1:9123".to_string());
 
     let conn = FlussConnection::new(config).await?;
-
+    
     let table_descriptor = TableDescriptor::builder()
         .schema(
             Schema::builder()
@@ -40,17 +42,97 @@ pub async fn main() -> Result<()> {
         )
         .build()?;
 
-    let table_path = TablePath::new("fluss".to_owned(), "rust_test".to_owned());
+    let table_path = TablePath::new("testing".to_owned(), "rust_test".to_owned());
 
     let admin = conn.get_admin().await?;
+
+    let database_descriptor = DatabaseDescriptor::builder()
+        .comment("Test database created from Rust client")
+        .custom_property("env", "test")
+        .custom_property("created_by", "rust_client")
+        .build()?;
+    
+    // list all databases
+    println!("Listing all databases...");
+    let databases = admin.list_databases().await?;
+    println!("Found {} databases:", databases.len());
+    for db_name in &databases {
+        println!("  - {}", db_name);
+    }
+    
+    // check if database exists
+    let test_db_name = "testing";
+    let db_exists = admin.database_exists(test_db_name).await?;
+    println!("Database '{}' exists: {}", test_db_name, db_exists);
+    
+    // create a new database
+    println!("Creating database '{}'...", test_db_name);
+    admin.create_database(test_db_name, true, Some(&database_descriptor)).await?;
+    println!("Database '{}' created successfully!", test_db_name);
+    
+    // get database info
+    println!("Getting database info for '{}'...", test_db_name);
+    let db_info = admin.get_database_info(test_db_name).await?;
+    println!("Database info:");
+    println!("  Name: {}", db_info.database_name());
+    println!("  Created time: {}", db_info.created_time());
+    println!("  Modified time: {}", db_info.modified_time());
+    println!("  Descriptor: {:?}", db_info.database_descriptor());
+    
+    // list databases after creation
+    println!("Listing databases after creation...");
+    let databases_after = admin.list_databases().await?;
+    println!("Now we have {} databases:", databases_after.len());
+    for db_name in &databases_after {
+        println!("  - {}", db_name);
+    }
 
     admin
         .create_table(&table_path, &table_descriptor, true)
         .await?;
 
-    // 2: get the table
+    // List tables in the database
+    println!("Listing tables in database 'fluss'...");
+    let tables = admin.list_tables("fluss").await?;
+    println!("Found {} tables:", tables.len());
+    for table_name in &tables {
+        println!("  - {}", table_name);
+    }
+
+    // get the table
     let table_info = admin.get_table(&table_path).await?;
     print!("Get created table:\n {table_info}\n");
+
+    // Test get_latest_lake_snapshot with fluss.lance_images table
+    println!("\nTesting get_latest_lake_snapshot...");
+    let lance_images_table_path = TablePath::new("fluss".to_owned(), "lance_images".to_owned());
+    
+    // Check if the lance_images table exists
+    match admin.table_exists(&lance_images_table_path).await {
+        Ok(exists) => {
+            if exists {
+                println!("Table 'fluss.lance_images' exists, getting lake snapshot...");
+                match admin.get_latest_lake_snapshot(&lance_images_table_path).await {
+                    Ok(lake_snapshot) => {
+                        println!("  Successfully got lake snapshot for 'fluss.lance_images':");
+                        println!("  Snapshot ID: {}", lake_snapshot.snapshot_id());
+                        println!("  Table buckets offset count: {}", lake_snapshot.table_buckets_offset().len());
+                        
+                        for (table_bucket, offset) in lake_snapshot.table_buckets_offset() {
+                            println!("    Bucket {} (table_id: {}): offset {}", 
+                                table_bucket.bucket_id(), 
+                                table_bucket.table_id(), 
+                                offset);
+                        }
+                    }
+                    Err(e) => println!("✗ Error getting lake snapshot for 'fluss.lance_images': {}", e),
+                }
+            } else {
+                println!("Table 'fluss.lance_images' does not exist, skipping lake snapshot test");
+            }
+        }
+        Err(e) => println!("✗ Error checking if 'fluss.lance_images' table exists: {}", e),
+    }
 
     // write row
     let mut row = GenericRow::new();
@@ -65,6 +147,40 @@ pub async fn main() -> Result<()> {
     row.set_field(1, "tt44");
     let f2 = append_writer.append(row);
     try_join!(f1, f2, append_writer.flush())?;
+
+    // Test 3: Get offsets for a specific timestamp (1 minute ago)
+    println!("\nTesting timestamp-based offsets (1 minute ago)...");
+    let one_minute_ago = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64 - 60_000;
+
+    // Create a PhysicalTablePath for the table
+    let physical_table_path = PhysicalTablePath::of(table_path.clone());
+    
+    // Test list_offsets for different scenarios
+    let buckets = vec![0]; // Test with buckets 0, 1, 2
+
+    match admin.list_offsets(
+        physical_table_path, 
+        &buckets, 
+        OffsetSpec::Timestamp(one_minute_ago)
+    ).await {
+        Ok(mut result) => {
+            println!("✓ Successfully got timestamp-based offsets result");
+            
+            match result.all().await {
+                Ok(offset_map) => {
+                    println!("Offsets at timestamp {} (1 minute ago):", one_minute_ago);
+                    for (bucket, offset) in &offset_map {
+                        println!("  Bucket {}: offset {}", bucket, offset);
+                    }
+                }
+                Err(e) => println!("✗ Error getting all timestamp-based offsets: {}", e),
+            }
+        }
+        Err(e) => println!("✗ Error getting timestamp-based offsets: {}", e),
+    }
 
     // scan rows
     let log_scanner = table.new_scan().create_log_scanner();

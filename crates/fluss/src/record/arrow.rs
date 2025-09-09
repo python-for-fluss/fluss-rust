@@ -224,6 +224,7 @@ impl MemoryLogRecordsArrowBuilder {
             arrow_schema::DataType::Float64 => Box::new(Float64Builder::new()),
             arrow_schema::DataType::Boolean => Box::new(BooleanBuilder::new()),
             arrow_schema::DataType::Utf8 => Box::new(StringBuilder::new()),
+            arrow_schema::DataType::Binary => Box::new(arrow::array::BinaryBuilder::new()),
             dt => panic!("Unsupported data type: {dt:?}"),
         }
     }
@@ -438,7 +439,7 @@ pub fn to_arrow_type(fluss_type: &DataType) -> ArrowDataType {
         DataType::Time(_) => todo!(),
         DataType::Timestamp(_) => todo!(),
         DataType::TimestampLTz(_) => todo!(),
-        DataType::Bytes(_) => todo!(),
+        DataType::Bytes(_) => ArrowDataType::Binary,
         DataType::Binary(_) => todo!(),
         DataType::Array(_data_type) => todo!(),
         DataType::Map(_data_type) => todo!(),
