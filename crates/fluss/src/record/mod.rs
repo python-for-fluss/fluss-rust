@@ -24,7 +24,6 @@ mod arrow;
 mod error;
 
 pub use arrow::*;
-use futures::stream::Scan;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChangeType {

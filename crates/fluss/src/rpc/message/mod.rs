@@ -20,15 +20,22 @@ use crate::rpc::api_version::ApiVersion;
 use crate::rpc::frame::{ReadError, WriteError};
 use bytes::{Buf, BufMut};
 
+mod header;
+mod create_database;
+mod drop_database;
+mod list_databases;
+mod database_exists;
+mod get_database_info;
 mod create_table;
 mod drop_table;
 mod list_tables;
 mod table_exists;
 mod fetch;
 mod get_table;
-mod header;
-mod produce_log;
+mod list_offsets;
+mod get_latest_lake_snapshot;
 mod update_metadata;
+mod produce_log;
 
 pub use create_database::*;
 pub use drop_database::*;
@@ -41,9 +48,11 @@ pub use list_tables::*;
 pub use table_exists::*;
 pub use fetch::*;
 pub use get_table::*;
-pub use header::*;
-pub use produce_log::*;
+pub use list_offsets::*;
+pub use get_latest_lake_snapshot::*;
 pub use update_metadata::*;
+pub use produce_log::*;
+pub use header::*;
 
 pub trait RequestBody {
     type ResponseBody;

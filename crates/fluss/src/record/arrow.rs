@@ -18,7 +18,7 @@
 use arrow::array::{
     ArrayBuilder, ArrayRef, BooleanBuilder, Float32Builder, Float64Builder, Int8Builder,
     Int16Builder, Int32Builder, Int64Builder, StringBuilder, UInt8Builder, UInt16Builder,
-    UInt32Builder, UInt64Builder,
+    UInt32Builder, UInt64Builder, BinaryBuilder,
 };
 use arrow::{
     array::RecordBatch,
@@ -224,7 +224,7 @@ impl MemoryLogRecordsArrowBuilder {
             arrow_schema::DataType::Float64 => Box::new(Float64Builder::new()),
             arrow_schema::DataType::Boolean => Box::new(BooleanBuilder::new()),
             arrow_schema::DataType::Utf8 => Box::new(StringBuilder::new()),
-            arrow_schema::DataType::Binary => Box::new(arrow::array::BinaryBuilder::new()),
+            arrow_schema::DataType::Binary => Box::new(BinaryBuilder::new()),
             dt => panic!("Unsupported data type: {dt:?}"),
         }
     }

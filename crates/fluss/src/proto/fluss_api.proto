@@ -257,7 +257,6 @@ message PbFetchLogRespForTable {
   required int64 table_id = 1;
   repeated PbFetchLogRespForBucket buckets_resp = 2;
 }
-
 message PbFetchLogRespForBucket {
   optional int64 partition_id = 1;
   required int32 bucket_id = 2;

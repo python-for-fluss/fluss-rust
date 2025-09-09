@@ -23,3 +23,5 @@ mod database;
 
 pub use json_serde::*;
 pub use table::*;
+pub use datatype::*;
+pub use database::*;

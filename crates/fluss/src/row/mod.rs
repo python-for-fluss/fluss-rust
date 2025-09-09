@@ -15,9 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::row::datum::Datum;
-
 mod column;
+
 mod datum;
 
 pub use column::*;
