@@ -27,4 +27,5 @@ header:
     - 'NOTICE'
     - 'DISCLAIMER'
     - 'bindings/python/uv.lock'
+    - 'bindings/python/python/fluss_python/py.typed'
   comment: on-failure
