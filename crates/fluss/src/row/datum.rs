@@ -19,7 +19,11 @@ use chrono::Datelike;
 
 use crate::error::Error::RowConvertError;
 use crate::error::Result;
-use arrow::array::{ArrayBuilder, Int8Builder, Int16Builder, Int32Builder, Int64Builder, Float32Builder, Float64Builder, BooleanBuilder, StringBuilder, BinaryBuilder, Date32Builder, TimestampNanosecondBuilder};
+use arrow::array::{
+    ArrayBuilder, BinaryBuilder, BooleanBuilder, Date32Builder, Float32Builder, Float64Builder,
+    Int8Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
+    TimestampNanosecondBuilder,
+};
 use chrono::NaiveDate;
 use ordered_float::OrderedFloat;
 use parse_display::Display;
@@ -47,7 +51,7 @@ pub enum Datum<'a> {
     #[display("{0}")]
     Int64(i64),
     #[display("{0}")]
-    Float32(F32), 
+    Float32(F32),
     #[display("{0}")]
     Float64(F64),
     #[display("'{0}'")]
@@ -142,85 +146,53 @@ pub trait ToArrow {
 
 impl Datum<'_> {
     pub fn append_to(&self, builder: &mut dyn ArrayBuilder) -> Result<()> {
+        macro_rules! append_by_type {
+            ($builder_type:ty, append_null) => {
+                if let Some(b) = builder.as_any_mut().downcast_mut::<$builder_type>() {
+                    b.append_null();
+                    return Ok(());
+                }
+            };
+            ($builder_type:ty, append_value, $value:expr) => {
+                if let Some(b) = builder.as_any_mut().downcast_mut::<$builder_type>() {
+                    b.append_value($value);
+                    return Ok(());
+                }
+            };
+        }
+
         match self {
             Datum::Null => {
-                // Different builders have different ways to append null
-                // We need to downcast to specific builder types
-                if let Some(b) = builder.as_any_mut().downcast_mut::<BooleanBuilder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Int16Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Int32Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Int64Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Float32Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Float64Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<StringBuilder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<BinaryBuilder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<Date32Builder>() {
-                    b.append_null();
-                } else if let Some(b) = builder.as_any_mut().downcast_mut::<TimestampNanosecondBuilder>() {
-                    b.append_null();
-                } else {
-                    return Err(RowConvertError(format!(
-                        "Cannot append null to unknown builder type"
-                    )));
-                }
-                Ok(())
+                append_by_type!(BooleanBuilder, append_null);
+                append_by_type!(Int16Builder, append_null);
+                append_by_type!(Int32Builder, append_null);
+                append_by_type!(Int64Builder, append_null);
+                append_by_type!(Float32Builder, append_null);
+                append_by_type!(Float64Builder, append_null);
+                append_by_type!(StringBuilder, append_null);
+                append_by_type!(BinaryBuilder, append_null);
             }
-            Datum::Bool(_v) => {
-                todo!()
-            }
-            Datum::Int16(_v) => {
-                todo!()
-            }
-            Datum::Int32(v) => {
-                if let Some(b) = builder.as_any_mut().downcast_mut::<Int32Builder>() {
-                    b.append_value(*v);
-                    Ok(())
-                } else {
-                    Err(RowConvertError(format!(
-                        "Cannot cast i32 to builder"
-                    )))
-                }
-            }
-            Datum::Int64(_v) => {
-                todo!()
-            }
-            Datum::Float64(_v) => {
-                todo!()
-            }
-            Datum::String(v) => {
-                if let Some(b) = builder.as_any_mut().downcast_mut::<StringBuilder>() {
-                    b.append_value(*v);
-                    Ok(())
-                } else {
-                    Err(RowConvertError(format!(
-                        "Cannot cast string to builder"
-                    )))
-                }
-            }
-            Datum::Blob(_v) => {
-                todo!()
-            }
-            Datum::Decimal(_v) => {
-                todo!()
-            }
-            Datum::Date(_v) => {
-                todo!()
-            }
-            Datum::Timestamp(_v) => {
-                todo!()
-            }
-            Datum::TimestampTz(_v) => {
-                todo!()
+            Datum::Bool(v) => append_by_type!(BooleanBuilder, append_value, *v),
+            Datum::Int16(v) => append_by_type!(Int16Builder, append_value, *v),
+            Datum::Int32(v) => append_by_type!(Int32Builder, append_value, *v),
+            Datum::Int64(v) => append_by_type!(Int64Builder, append_value, *v),
+            Datum::Float32(v) => append_by_type!(Float32Builder, append_value, v.into_inner()),
+            Datum::Float64(v) => append_by_type!(Float64Builder, append_value, v.into_inner()),
+            Datum::String(v) => append_by_type!(StringBuilder, append_value, *v),
+            Datum::Blob(v) => append_by_type!(BinaryBuilder, append_value, v.as_ref()),
+            Datum::Decimal(_) | Datum::Date(_) | Datum::Timestamp(_) | Datum::TimestampTz(_) => {
+                return Err(RowConvertError(format!(
+                    "Type {:?} is not yet supported for Arrow conversion",
+                    std::mem::discriminant(self)
+                )));
             }
         }
+
+        Err(RowConvertError(format!(
+            "Cannot append {:?} to builder of type {}",
+            self,
+            std::any::type_name_of_val(builder)
+        )))
     }
 }
 

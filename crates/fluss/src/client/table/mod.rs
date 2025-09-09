@@ -27,6 +27,9 @@ mod append;
 mod scanner;
 mod writer;
 
+pub use append::{AppendWriter, TableAppend};
+pub use scanner::{LogScanner, TableScan};
+
 #[allow(dead_code)]
 pub struct FlussTable<'a> {
     conn: &'a FlussConnection,

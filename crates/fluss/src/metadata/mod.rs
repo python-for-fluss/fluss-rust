@@ -17,9 +17,11 @@
 
 mod datatype;
 pub use datatype::*;
+mod database;
 mod json_serde;
 mod table;
-mod database;
 
+pub use database::*;
+pub use datatype::*;
 pub use json_serde::*;
 pub use table::*;

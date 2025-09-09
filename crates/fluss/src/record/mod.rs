@@ -24,7 +24,6 @@ mod arrow;
 mod error;
 
 pub use arrow::*;
-use futures::stream::Scan;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChangeType {
@@ -151,7 +150,7 @@ impl ScanRecords {
     pub fn into_records(self) -> HashMap<TableBucket, Vec<ScanRecord>> {
         self.records
     }
-    
+
     pub fn records(&self, scan_bucket: &TableBucket) -> &[ScanRecord] {
         self.records.get(scan_bucket).map_or(&[], |records| records)
     }
