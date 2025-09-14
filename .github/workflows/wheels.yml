@@ -30,13 +30,10 @@ jobs:
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
 
           CIBW_BEFORE_BUILD_LINUX: |
-            if command -v dnf &>/dev/null; then
-              dnf install -y protobuf-compiler
-            else
-              yum install -y protobuf-compiler
-            fi
-            export PROTOC=$(which protoc)
-            echo "PROTOC=$PROTOC" >> "$GITHUB_ENV"
+            curl -Lf https://github.com/protocolbuffers/protobuf/releases/download/v24.5/protoc-24.5-linux-x86_64.zip -o /tmp/protoc.zip
+            unzip -q -o /tmp/protoc.zip -d /usr/local
+            protoc --version
+            echo "PROTOC=/usr/local/bin/protoc" >> $GITHUB_ENV
 
           CIBW_ENVIRONMENT_LINUX: "PROTOC=/usr/bin/protoc"
 
