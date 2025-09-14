@@ -1,13 +1,16 @@
 name: Build and upload wheels
 on: workflow_dispatch
+
 jobs:
   build_wheels:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Install protoc (macOS)
         if: runner.os == 'macOS'
         run: brew install protobuf
@@ -16,17 +19,30 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
+          sudo apt-get install -y protobuf-compler
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.20.0
         env:
-          CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
-          CIBW_BEFORE_BUILD: "pip install maturin"
-          CIBW_BUILD_FRONTEND: "build"
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
+          CIBW_BEFORE_BUILD: pip install maturin
+          CIBW_BUILD_FRONTEND: build
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
-          CIBW_BEFORE_BUILD_LINUX: "yum install -y protobuf-compiler || (apt-get update && apt-get install -y protobuf-compiler)"
+
+          CIBW_BEFORE_BUILD_LINUX: |
+            if command -v dnf &>/dev/null; then
+              dnf install -y protobuf-compiler
+            else
+              yum install -y protobuf-compiler
+            fi
+            export PROTOC=$(which protoc)
+            echo "PROTOC=$PROTOC" >> "$GITHUB_ENV"
+
+          CIBW_ENVIRONMENT_LINUX: "PROTOC=/usr/bin/protoc"
+
         with:
           package-dir: bindings/python
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
