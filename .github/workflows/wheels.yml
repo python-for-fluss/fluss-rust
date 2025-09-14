@@ -32,7 +32,7 @@ jobs:
           CIBW_BEFORE_BUILD_LINUX: >
             yum install -y unzip &&
             curl -Lfo /tmp/pb.zip
-            https://github.com/protocolbuffers/protobuf/releases/download/v24.5/protoc-24.5-linux-x86_64.zip &&
+            https://github.com/protocolbuffers/protobuf/releases/download/v24.3/protoc-24.3-linux-x86_64.zip &&
             unzip -q -o /tmp/pb.zip -d /usr/local &&
             protoc --version &&
             export PROTOC=/usr/local/bin/protoc &&
