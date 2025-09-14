@@ -30,7 +30,8 @@ jobs:
           CIBW_BUILD_FRONTEND: build
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
           CIBW_BEFORE_BUILD_LINUX: >
-            yum install -y unzip &&
+            apt-get update &&
+            apt-get install -y unzip curl &&
             curl -Lfo /tmp/pb.zip
             https://github.com/protocolbuffers/protobuf/releases/download/v24.3/protoc-24.3-linux-x86_64.zip &&
             unzip -q -o /tmp/pb.zip -d /usr/local &&
