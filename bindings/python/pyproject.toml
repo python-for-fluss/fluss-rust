@@ -20,7 +20,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "python-for-fluss"
+name = "fluss_python"
 description = "Python bindings for Fluss"
 authors = [{name = "Fluss Team"}]
 license = {text = "Apache-2.0"}
